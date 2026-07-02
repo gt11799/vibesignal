@@ -49,6 +49,11 @@ def test_applescript_source_uses_module_form_when_no_script():
     assert "/abs/python -m vibesignal widget" in src
 
 
+def test_applescript_source_can_pin_usage_provider():
+    src = installer.applescript_source(["/usr/local/bin/vibesignal"], usage_provider="claude")
+    assert "/usr/local/bin/vibesignal widget --usage-provider claude" in src
+
+
 def test_plist_content_has_required_keys():
     plist = installer.plist_content(["/usr/local/bin/vibesignal"])
     for key in ("Label", "ProgramArguments", "RunAtLoad", "KeepAlive",
@@ -70,6 +75,13 @@ def test_plist_content_args_expand_correctly():
     assert "<string>-m</string>" in plist2
     assert "<string>vibesignal</string>" in plist2
     assert "<string>widget</string>" in plist2
+
+
+def test_plist_content_can_pin_usage_provider():
+    plist = installer.plist_content(["/usr/local/bin/vibesignal"], usage_provider="codex")
+    assert "<string>widget</string>" in plist
+    assert "<string>--usage-provider</string>" in plist
+    assert "<string>codex</string>" in plist
 
 
 def test_plist_content_escapes_xml_special_chars():
@@ -198,6 +210,10 @@ def test_windows_shortcut_ps1_has_folder_target_and_args():
     assert ps1.strip().endswith("Write-Output $lnk")
 
 
+def test_windows_widget_arguments_can_pin_usage_provider():
+    assert installer._windows_widget_arguments("claude") == "-m vibesignal widget --usage-provider claude"
+
+
 def test_windows_shortcut_ps1_escapes_single_quote_in_path():
     # A path with a single quote must be doubled so it cannot break the PS literal.
     ps1 = installer._windows_shortcut_ps1(
@@ -250,15 +266,27 @@ def test_check_supported_passes_on_win32_and_darwin(monkeypatch):
 def test_install_launcher_dispatches_to_windows(monkeypatch):
     monkeypatch.setattr("sys.platform", "win32")
     sentinel = object()
-    monkeypatch.setattr(installer, "_windows_install_launcher", lambda: sentinel)
-    assert installer.install_launcher() is sentinel
+    seen = []
+    monkeypatch.setattr(
+        installer,
+        "_windows_install_launcher",
+        lambda usage_provider=None: seen.append(usage_provider) or sentinel,
+    )
+    assert installer.install_launcher(usage_provider="claude") is sentinel
+    assert seen == ["claude"]
 
 
 def test_install_autostart_dispatches_to_windows(monkeypatch):
     monkeypatch.setattr("sys.platform", "win32")
     sentinel = object()
-    monkeypatch.setattr(installer, "_windows_install_autostart", lambda launch_now=True: sentinel)
-    assert installer.install_autostart() is sentinel
+    seen = []
+    monkeypatch.setattr(
+        installer,
+        "_windows_install_autostart",
+        lambda launch_now=True, usage_provider=None: seen.append((launch_now, usage_provider)) or sentinel,
+    )
+    assert installer.install_autostart(launch_now=False, usage_provider="codex") is sentinel
+    assert seen == [(False, "codex")]
 
 
 def test_uninstall_dispatches_to_windows(monkeypatch):
@@ -278,11 +306,11 @@ def test_windows_autostart_launch_now_controls_widget_start(monkeypatch):
     monkeypatch.setattr("sys.platform", "win32")
     monkeypatch.setattr(installer, "_run_powershell", lambda script: r"C:\Startup\VibeSignal.lnk")
     started = []
-    monkeypatch.setattr(installer, "_windows_launch_widget", lambda: started.append(1))
+    monkeypatch.setattr(installer, "_windows_launch_widget", lambda usage_provider=None: started.append(usage_provider))
     installer.install_autostart(launch_now=False)
     assert started == []        # --no-launch: widget not started
-    installer.install_autostart(launch_now=True)
-    assert started == [1]       # default: widget started now
+    installer.install_autostart(launch_now=True, usage_provider="claude")
+    assert started == ["claude"]       # default: widget started now
 
 
 def test_macos_autostart_launch_now_controls_bootstrap(monkeypatch, tmp_path):
@@ -296,9 +324,11 @@ def test_macos_autostart_launch_now_controls_bootstrap(monkeypatch, tmp_path):
     monkeypatch.setattr(installer, "_launchd_target", lambda: "gui/501")
     runs = []
     monkeypatch.setattr(installer.subprocess, "run", lambda cmd, **kw: runs.append(cmd))
-    installer.install_autostart(launch_now=False)
+    installer.install_autostart(launch_now=False, usage_provider="claude")
     assert plist.exists()                                  # plist written
     assert not any("bootstrap" in cmd for cmd in runs)     # no start-now
+    assert "<string>--usage-provider</string>" in plist.read_text()
+    assert "<string>claude</string>" in plist.read_text()
     runs.clear()
     installer.install_autostart(launch_now=True)
     assert any("bootstrap" in cmd for cmd in runs)         # start-now
@@ -340,7 +370,7 @@ def test_macos_install_launcher_applies_icons(monkeypatch, tmp_path):
     monkeypatch.setattr(installer.subprocess, "run", run)
     monkeypatch.setattr(installer, "_macos_apply_icons", lambda app: applied.append(app))
 
-    dest = installer._macos_install_launcher()
+    dest = installer._macos_install_launcher(usage_provider="codex")
 
     assert dest == tmp_path / "VibeSignal.app"
     assert applied == [dest]

@@ -9,14 +9,15 @@
 | 透明度 | 0.97 → 0.95，保证白色桌面背景上文字更清楚 |
 | 停靠位置 | 左下角 → 右上角（菜单栏下 12px、右边距 14px） |
 | Dock 图标 | `assets/VibeSignal.svg` 是矢量源，`scripts/render_icon.py` 从矢量几何导出高清 PNG/ICNS；`install-launcher` 自动把图标写入 `.app` 并复制运行时 Dock 图标 |
-| Codex 额度 footer | 面板底部状态栏：Codex 5 小时和周窗口剩余比例，例如 `5h 57% (4h40m) · wk 64% (5d16h)`，白色粗体显示，每 5 分钟后台刷新 |
+| 剩余额度 footer | 面板底部状态栏：可选 Codex 或 Claude Code provider，显示 5 小时和 7 天窗口剩余比例，例如 `5h 57% (4h40m) · 7d 64% (5d16h)`，白色粗体显示，每 5 分钟后台刷新 |
 
 额度数据来源：
 
-- 优先从 `~/.codex/auth.json` 读取 Codex ChatGPT 登录态 access token，调
+- Codex：优先从 `~/.codex/auth.json` 读取 Codex ChatGPT 登录态 access token，调
   `https://chatgpt.com/backend-api/codex/usage`；
 - 接口不可用时读取本机 `~/.codex/sessions/**/*.jsonl` 最新 `rate_limits`；
-- UI 显示剩余比例（`100 - used_percent`）和 reset 倒计时。没有可用额度数据时 footer 留空，不影响状态面板。
+- Claude Code：从 macOS Keychain 读取 Claude Code OAuth token，调 Anthropic OAuth usage 接口；
+- UI 显示剩余比例（Codex 为 `100 - used_percent`，Claude 为 `100 - utilization`）和 reset 倒计时。没有可用额度数据时 footer 留空，不影响状态面板。
 
 ## 安装
 
@@ -49,7 +50,12 @@ uv tool install --force --python-preference only-managed --python 3.13 \
    `dock-icon.png` 复制到 `~/.local/share/vibesignal/`。想换图案：改
    `assets/VibeSignal.svg` 和 `scripts/render_icon.py` 里的绘制参数后重新生成。
 
-3. **自启**：`vibesignal install-autostart`
+3. **自启和 footer provider**：
+
+   ```bash
+   vibesignal install-autostart --usage-provider auto
+   # 或 codex / claude / off
+   ```
 
 4. **客户端 hooks**：
    - Claude Code：`hooks/claude-settings.snippet.json` 合并进 `~/.claude/settings.json`（命令建议写

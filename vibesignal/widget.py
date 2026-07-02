@@ -24,9 +24,10 @@ import tkinter.font as tkfont
 from . import resolve
 from .panel import _fmt_age
 
-# --- Codex rate-limit footer (managed by vibesignal-restyle) ---
+# --- rate-limit footer (managed by vibesignal-restyle) ---
 import json
 import os
+import subprocess
 import threading
 import urllib.request
 from collections import deque
@@ -34,6 +35,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _CODEX_USAGE_URL = "https://chatgpt.com/backend-api/codex/usage"
+_CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+_USAGE_PROVIDER_CHOICES = {"auto", "codex", "claude", "off"}
 
 
 def _codex_home() -> Path:
@@ -96,6 +99,26 @@ def _codex_session_usage_json():
     return None
 
 
+def _claude_oauth_usage_json():
+    out = subprocess.run(
+        ["/usr/bin/security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+        capture_output=True, text=True, timeout=30,
+    )
+    if out.returncode != 0:
+        return None
+    token = json.loads(out.stdout.strip())["claudeAiOauth"]["accessToken"]
+    req = urllib.request.Request(
+        _CLAUDE_USAGE_URL,
+        headers={
+            "Authorization": "Bearer " + token,
+            "anthropic-beta": "oauth-2025-04-20",
+            "User-Agent": "vibesignal",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read().decode())
+
+
 def _num(value):
     if value is None:
         return None
@@ -139,20 +162,22 @@ def _fmt_reset_seconds(secs):
     return f" ({m // 60}h{m % 60:02d}m)"
 
 
-def _remaining_percent(window: dict) -> float | None:
+def _remaining_percent(window: dict, *, utilization_is_used: bool = False) -> float | None:
     remaining = _num(_first_present(window, "remaining_percent", "remainingPercent"))
     if remaining is not None:
         return max(0, min(100, remaining))
     used = _num(_first_present(window, "used_percent", "usedPercent"))
+    if used is None and utilization_is_used:
+        used = _num(_first_present(window, "utilization", "utilization_percent", "utilizationPercent"))
     if used is None:
         return None
     return max(0, min(100, 100 - used))
 
 
-def _format_codex_window(label: str, window: dict) -> str | None:
+def _format_remaining_window(label: str, window: dict, *, utilization_is_used: bool = False) -> str | None:
     if not isinstance(window, dict):
         return None
-    remaining = _remaining_percent(window)
+    remaining = _remaining_percent(window, utilization_is_used=utilization_is_used)
     if remaining is None:
         return None
     reset = _fmt_reset_seconds(_reset_seconds(window))
@@ -167,15 +192,26 @@ def _format_codex_usage(data: dict | None) -> str:
         return ""
     parts = []
     for key, camel, direct, label in (("primary_window", "primaryWindow", "primary", "5h"),
-                                      ("secondary_window", "secondaryWindow", "secondary", "wk")):
+                                      ("secondary_window", "secondaryWindow", "secondary", "7d")):
         window = _first_present(rate, key, camel, direct)
-        part = _format_codex_window(label, window)
+        part = _format_remaining_window(label, window)
         if part:
             parts.append(part)
     return " · ".join(parts)
 
 
-def _fetch_usage():
+def _format_claude_usage(data: dict | None) -> str:
+    if not isinstance(data, dict):
+        return ""
+    parts = []
+    for key, label in (("five_hour", "5h"), ("seven_day", "7d")):
+        part = _format_remaining_window(label, data.get(key), utilization_is_used=True)
+        if part:
+            parts.append(part)
+    return " · ".join(parts)
+
+
+def _fetch_codex_usage() -> str:
     try:
         text = _format_codex_usage(_codex_usage_json())
         if text:
@@ -186,6 +222,34 @@ def _fetch_usage():
         return _format_codex_usage(_codex_session_usage_json())
     except Exception:
         return ""
+
+
+def _fetch_claude_usage() -> str:
+    try:
+        return _format_claude_usage(_claude_oauth_usage_json())
+    except Exception:
+        return ""
+
+
+def _usage_provider(provider: str | None = None) -> str:
+    raw = provider or os.environ.get("VIBESIGNAL_USAGE_PROVIDER") or "auto"
+    value = raw.strip().lower()
+    return value if value in _USAGE_PROVIDER_CHOICES else "auto"
+
+
+def _fetch_usage(provider: str | None = None):
+    selected = _usage_provider(provider)
+    if selected == "off":
+        return ""
+    if selected == "codex":
+        return _fetch_codex_usage()
+    if selected == "claude":
+        return _fetch_claude_usage()
+    for fetch in (_fetch_codex_usage, _fetch_claude_usage):
+        text = fetch()
+        if text:
+            return text
+    return ""
 
 
 def _font_family() -> str:
@@ -258,8 +322,9 @@ def row_fields(row: dict, now: float):
 
 
 class Widget:
-    def __init__(self, interval_ms: int = 1000):
+    def __init__(self, interval_ms: int = 1000, usage_provider: str | None = None):
         self.interval_ms = interval_ms
+        self.usage_provider = _usage_provider(usage_provider)
         self.root = tk.Tk()
         self.root.withdraw()
         self.root.overrideredirect(True)
@@ -366,7 +431,7 @@ class Widget:
 
     def _usage_loop(self):
         while True:
-            txt = _fetch_usage()
+            txt = _fetch_usage(self.usage_provider)
             if txt:
                 self._usage_text = txt
             time.sleep(300)
@@ -484,8 +549,8 @@ class Widget:
         self.root.mainloop()
 
 
-def main(interval_ms: int = 1000) -> int:
-    Widget(interval_ms=interval_ms).run()
+def main(interval_ms: int = 1000, usage_provider: str | None = None) -> int:
+    Widget(interval_ms=interval_ms, usage_provider=usage_provider).run()
     return 0
 
 

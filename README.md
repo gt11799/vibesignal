@@ -4,7 +4,7 @@ VibeSignal 是一个给 AI 编码工具用的桌面状态面板和 USB 状态灯
 
 源码仓库：<https://github.com/gt11799/vibesignal>
 
-本仓库基于上游 `yzhao062/vibesignal` 做了本地化定制，重点是把桌面面板做得更适合长期常驻使用，并增加 Codex 剩余额度信息的展示。
+本仓库基于上游 `yzhao062/vibesignal` 做了本地化定制，重点是把桌面面板做得更适合长期常驻使用，并增加 Codex / Claude Code 剩余额度信息的展示。
 
 ## 主要特性
 
@@ -12,7 +12,7 @@ VibeSignal 是一个给 AI 编码工具用的桌面状态面板和 USB 状态灯
 - 页面美化：高对比深色主题、右上角停靠、清晰白字、blocked/error 高亮报警态。
 - Claude Code 支持：通过 hooks 自动上报 working、blocked、done 和 SessionEnd。
 - Codex 进程支持：通过 Codex hooks 把本地 Codex 会话纳入同一个状态面板。
-- Codex 剩余额度展示：面板底部显示 5 小时窗口和周窗口的剩余比例与重置倒计时。
+- 剩余额度展示：面板底部可显示 Codex 或 Claude Code 的 5 小时窗口和 7 天窗口剩余比例与重置倒计时。
 - Cowork 桥接：可把 Claude.app Cowork 本地 VM 的活动近似显示为 `cowork/local-vm`。
 - 多会话聚合：多个 agent 同时跑时按 `blocked > error > done > working > idle` 聚合。
 - 多种展示方式：USB busylight、终端 watch 面板、Tk 桌面 widget。
@@ -54,6 +54,18 @@ vibesignal install-autostart
 `vibesignal-restyle` 会修复 uv tool venv 里 Tcl/Tk 路径找不到的问题。每次 `uv tool install --force` 或升级后，都建议重新跑一次。
 如果只改了 hooks，不需要重启 widget；如果改了 `widget.py` 样式或图标资产，需要重启 `vibesignal widget` 才能看到新效果。
 `vibesignal install-launcher` 会自动把内置图标复制到启动器和 `~/.local/share/vibesignal/`，不需要再手动覆盖 `.app` 图标。
+
+状态栏 provider 可以在安装时选择：
+
+```bash
+vibesignal install-launcher --usage-provider codex
+vibesignal install-autostart --usage-provider codex
+
+vibesignal install-launcher --usage-provider claude
+vibesignal install-autostart --usage-provider claude
+```
+
+`auto` 会优先显示 Codex，取不到时尝试 Claude Code；`off` 会关闭底部剩余额度状态栏。
 
 ## 常用命令
 
@@ -199,21 +211,22 @@ aggregate: working
 - hook 报找不到命令：把 `~/.codex/hooks.json` 里的命令改成 `$HOME/.local/bin/vibesignal` 的绝对路径。
 - 状态显示 `done` 后没有立即消失：Codex 没有 SessionEnd 事件，会话行靠 TTL 过期，这是预期行为。
 
-## Codex 剩余额度展示
+## 剩余额度状态栏
 
 桌面面板底部会尝试显示：
 
 ```text
-5h 57% (4h40m) · wk 64% (5d16h)
+5h 57% (4h40m) · 7d 64% (5d16h)
 ```
 
-数据来源：
+可选 provider：
 
-- 读取 `~/.codex/auth.json` 里的 Codex ChatGPT 登录态 access token。
-- 优先请求 Codex 的 ChatGPT 后端 usage 接口；接口不可用时，读取本机 `~/.codex/sessions/**/*.jsonl` 里最新的 `rate_limits`。
-- 面板显示的是剩余比例：`100 - used_percent`，并附带 reset 倒计时。
+- `codex`：读取 `~/.codex/auth.json` 里的 Codex ChatGPT 登录态 access token，优先请求 Codex usage 接口；接口不可用时，读取本机 `~/.codex/sessions/**/*.jsonl` 里最新的 `rate_limits`。
+- `claude`：读取 macOS Keychain 里的 Claude Code OAuth token，请求 Anthropic OAuth usage 接口。
+- `auto`：先尝试 Codex，再尝试 Claude Code。
+- `off`：不显示底部剩余额度状态栏。
 
-如果没有登录 Codex，且本机还没有带 `rate_limits` 的 Codex session 日志，footer 会留空，不影响会话状态展示。
+面板显示的是剩余比例和 reset 倒计时。没有可用额度数据时 footer 会留空，不影响会话状态展示。
 
 ## Cowork 桥接
 

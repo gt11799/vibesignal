@@ -195,35 +195,48 @@ def test_status_lists_blocked_older_than_store_ttl(tmp_path, monkeypatch):
 
 def test_install_launcher_message_is_windows_on_win32(capsys, monkeypatch):
     monkeypatch.setattr("sys.platform", "win32")
+    class Args:
+        usage_provider = "claude"
+
     monkeypatch.setattr(
         "vibesignal.installer.install_launcher",
-        lambda: Path(r"C:\Start Menu\VibeSignal.lnk"),
+        lambda usage_provider=None: Path(r"C:\Start Menu\VibeSignal.lnk"),
     )
-    assert cli.cmd_install_launcher(None) == 0
+    assert cli.cmd_install_launcher(Args()) == 0
     out = capsys.readouterr().out
     assert "Start menu" in out
+    assert "claude" in out
     assert "Spotlight" not in out and "Dock" not in out
 
 
 def test_install_autostart_message_is_windows_on_win32(capsys, monkeypatch):
     monkeypatch.setattr("sys.platform", "win32")
+    class Args:
+        no_launch = False
+        usage_provider = "codex"
+
     monkeypatch.setattr(
         "vibesignal.installer.install_autostart",
-        lambda launch_now=True: Path(r"C:\Startup\VibeSignal.lnk"),
+        lambda launch_now=True, usage_provider=None: Path(r"C:\Startup\VibeSignal.lnk"),
     )
-    assert cli.cmd_install_autostart(None) == 0
+    assert cli.cmd_install_autostart(Args()) == 0
     out = capsys.readouterr().out
     assert "shortcut" in out
+    assert "codex" in out
     assert "LaunchAgent" not in out
 
 
 def test_install_autostart_message_is_macos_on_darwin(capsys, monkeypatch):
     monkeypatch.setattr("sys.platform", "darwin")
+    class Args:
+        no_launch = False
+        usage_provider = "auto"
+
     monkeypatch.setattr(
         "vibesignal.installer.install_autostart",
-        lambda launch_now=True: Path("/Users/j/Library/LaunchAgents/io.github.yzhao062.vibesignal.plist"),
+        lambda launch_now=True, usage_provider=None: Path("/Users/j/Library/LaunchAgents/io.github.yzhao062.vibesignal.plist"),
     )
-    assert cli.cmd_install_autostart(None) == 0
+    assert cli.cmd_install_autostart(Args()) == 0
     out = capsys.readouterr().out
     assert "LaunchAgent" in out
 
@@ -247,14 +260,16 @@ def test_install_autostart_no_launch_passes_launch_now_false(capsys, monkeypatch
     import types
     seen = {}
 
-    def fake_install(launch_now=True):
+    def fake_install(launch_now=True, usage_provider=None):
         seen["launch_now"] = launch_now
+        seen["usage_provider"] = usage_provider
         return Path(r"C:\Startup\VibeSignal.lnk")
 
     monkeypatch.setattr("sys.platform", "win32")
     monkeypatch.setattr("vibesignal.installer.install_autostart", fake_install)
     assert cli.cmd_install_autostart(types.SimpleNamespace(no_launch=True)) == 0
     assert seen["launch_now"] is False
+    assert seen["usage_provider"] is None
     out = capsys.readouterr().out
     assert "next login" in out
     assert "starts now" not in out

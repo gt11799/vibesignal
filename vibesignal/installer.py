@@ -31,6 +31,7 @@ APP_NAME = "VibeSignal.app"
 SHORTCUT_NAME = "VibeSignal.lnk"
 ICON_NAME = "VibeSignal.icns"
 DOCK_ICON_NAME = "dock-icon.png"
+USAGE_PROVIDER_CHOICES = ("auto", "codex", "claude", "off")
 
 # Console-script filenames pip can produce. POSIX wheels create a bare
 # `vibesignal`; Windows wheels add a `.exe` launcher. Listing both keeps the
@@ -131,21 +132,39 @@ def _launchd_target() -> str:
     return f"gui/{os.getuid()}"
 
 
-def applescript_source(args: list[str]) -> str:
+def _widget_command_parts(args: list[str], usage_provider: str | None = None) -> list[str]:
+    parts = [*args, "widget"]
+    if usage_provider:
+        parts.extend(["--usage-provider", usage_provider])
+    return parts
+
+
+def _windows_widget_arguments(usage_provider: str | None = None) -> str:
+    return " ".join(shlex.quote(p) for p in _windows_widget_argv(usage_provider))
+
+
+def _windows_widget_argv(usage_provider: str | None = None) -> list[str]:
+    parts = ["-m", "vibesignal", "widget"]
+    if usage_provider:
+        parts.extend(["--usage-provider", usage_provider])
+    return parts
+
+
+def applescript_source(args: list[str], usage_provider: str | None = None) -> str:
     """Render the AppleScript that launches the widget headlessly.
 
     Backgrounded with ``&`` so the shell call returns at once; the widget
     process detaches and stays alive in the Aqua session. AppleScript string
     literals only need ``\\`` and ``"`` escaped, which is what the body does.
     """
-    cmd = " ".join(shlex.quote(a) for a in [*args, "widget"])
+    cmd = " ".join(shlex.quote(a) for a in _widget_command_parts(args, usage_provider))
     escaped = cmd.replace("\\", "\\\\").replace('"', '\\"')
     return f'do shell script "{escaped} > /dev/null 2>&1 &"\n'
 
 
-def plist_content(args: list[str]) -> str:
+def plist_content(args: list[str], usage_provider: str | None = None) -> str:
     """Render the LaunchAgent plist as a UTF-8 XML string."""
-    parts = [*args, "widget"]
+    parts = _widget_command_parts(args, usage_provider)
     args_xml = "\n".join(
         f"        <string>{xml.sax.saxutils.escape(p)}</string>" for p in parts
     )
@@ -176,9 +195,9 @@ def plist_content(args: list[str]) -> str:
     )
 
 
-def _macos_install_launcher() -> Path:
+def _macos_install_launcher(usage_provider: str | None = None) -> Path:
     args = vibesignal_args()
-    src = applescript_source(args)
+    src = applescript_source(args, usage_provider=usage_provider)
 
     dest_dir = _user_applications_dir()
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -231,9 +250,9 @@ def _macos_uninstall_launcher() -> bool:
     return True
 
 
-def _macos_install_autostart(launch_now: bool = True) -> Path:
+def _macos_install_autostart(launch_now: bool = True, usage_provider: str | None = None) -> Path:
     args = vibesignal_args()
-    content = plist_content(args)
+    content = plist_content(args, usage_provider=usage_provider)
 
     agents = _launch_agents_dir()
     agents.mkdir(parents=True, exist_ok=True)
@@ -356,23 +375,23 @@ def _run_powershell(script: str) -> str:
         Path(path).unlink(missing_ok=True)
 
 
-def _windows_launch_widget() -> None:
+def _windows_launch_widget(usage_provider: str | None = None) -> None:
     """Start the widget now, detached and console-less, mirroring macOS RunAtLoad."""
     creationflags = getattr(subprocess, "DETACHED_PROCESS", 0)
     subprocess.Popen(
-        [_windows_pythonw(), "-m", "vibesignal", "widget"],
+        [_windows_pythonw(), *_windows_widget_argv(usage_provider)],
         creationflags=creationflags,
         close_fds=True,
     )
 
 
-def _windows_install_launcher() -> Path:
+def _windows_install_launcher(usage_provider: str | None = None) -> Path:
     """Create on-demand VibeSignal shortcuts in the Start Menu and on the Desktop.
 
     The Start Menu copy is searchable (type ``VibeSignal`` in the Start menu);
     the Desktop copy is one double-click away. Returns the Start Menu .lnk path.
     """
-    target, args, workdir = _windows_pythonw(), "-m vibesignal widget", str(Path.home())
+    target, args, workdir = _windows_pythonw(), _windows_widget_arguments(usage_provider), str(Path.home())
     programs = Path(
         _run_powershell(_windows_shortcut_ps1("Programs", target, args, workdir))
     )
@@ -389,13 +408,15 @@ def _windows_uninstall_launcher() -> bool:
     return "removed" in results
 
 
-def _windows_install_autostart(launch_now: bool = True) -> Path:
+def _windows_install_autostart(
+    launch_now: bool = True, usage_provider: str | None = None
+) -> Path:
     """Write a Startup-folder shortcut so the widget launches at every login.
     Also starts the widget now unless ``launch_now`` is False. Returns the .lnk path."""
-    target, args, workdir = _windows_pythonw(), "-m vibesignal widget", str(Path.home())
+    target, args, workdir = _windows_pythonw(), _windows_widget_arguments(usage_provider), str(Path.home())
     lnk = Path(_run_powershell(_windows_shortcut_ps1("Startup", target, args, workdir)))
     if launch_now:
-        _windows_launch_widget()
+        _windows_launch_widget(usage_provider)
     return lnk
 
 
@@ -408,13 +429,13 @@ def _windows_uninstall_autostart() -> bool:
 # Public API: dispatch by platform.
 # --------------------------------------------------------------------------- #
 
-def install_launcher() -> Path:
+def install_launcher(usage_provider: str | None = None) -> Path:
     """Install a one-click launcher (macOS .app, or Windows Start Menu + Desktop
     shortcuts). Returns the launcher path. Re-install overwrites the prior one."""
     if sys.platform == "win32":
-        return _windows_install_launcher()
+        return _windows_install_launcher(usage_provider=usage_provider)
     _check_supported()
-    return _macos_install_launcher()
+    return _macos_install_launcher(usage_provider=usage_provider)
 
 
 def uninstall_launcher() -> bool:
@@ -425,14 +446,16 @@ def uninstall_launcher() -> bool:
     return _macos_uninstall_launcher()
 
 
-def install_autostart(launch_now: bool = True) -> Path:
+def install_autostart(
+    launch_now: bool = True, usage_provider: str | None = None
+) -> Path:
     """Install login autostart (macOS LaunchAgent, or a Windows Startup shortcut).
     Also starts the widget now unless ``launch_now`` is False. Returns the
     autostart file path."""
     if sys.platform == "win32":
-        return _windows_install_autostart(launch_now=launch_now)
+        return _windows_install_autostart(launch_now=launch_now, usage_provider=usage_provider)
     _check_supported()
-    return _macos_install_autostart(launch_now=launch_now)
+    return _macos_install_autostart(launch_now=launch_now, usage_provider=usage_provider)
 
 
 def uninstall_autostart() -> bool:

@@ -25,6 +25,8 @@ import threading
 from . import light, lock, store
 from .resolve import State, resolve_color, resolve_per_session
 
+USAGE_PROVIDER_CHOICES = ("auto", "codex", "claude", "off")
+
 
 def _default_stdin_timeout() -> float:
     # Hook stdin must be available within this window, or the event falls back to
@@ -160,13 +162,18 @@ def cmd_watch(args) -> int:
 
 def cmd_widget(args) -> int:
     from . import widget
-    return widget.main(interval_ms=int(args.interval * 1000))
+    return widget.main(
+        interval_ms=int(args.interval * 1000),
+        usage_provider=getattr(args, "usage_provider", None),
+    )
 
 
 def cmd_install_launcher(args) -> int:
     from . import installer
-    dest = installer.install_launcher()
+    provider = getattr(args, "usage_provider", None)
+    dest = installer.install_launcher(usage_provider=provider)
     print(f"[vibesignal] installed launcher: {dest}")
+    print(f"[vibesignal] usage footer provider: {provider}")
     if sys.platform == "win32":
         print("Launch from the Start menu (type 'VibeSignal') or the Desktop shortcut.")
     else:
@@ -184,7 +191,8 @@ def cmd_uninstall_launcher(args) -> int:
 def cmd_install_autostart(args) -> int:
     from . import installer
     launch_now = not getattr(args, "no_launch", False)
-    dest = installer.install_autostart(launch_now=launch_now)
+    provider = getattr(args, "usage_provider", None)
+    dest = installer.install_autostart(launch_now=launch_now, usage_provider=provider)
     if sys.platform == "win32":
         print(f"[vibesignal] installed autostart shortcut: {dest}")
         print("The widget starts now and at every future login." if launch_now
@@ -195,6 +203,7 @@ def cmd_install_autostart(args) -> int:
               else "Widget will start at the next login (run 'vibesignal widget &' to start it now).")
     if launch_now:
         print("Close any manually opened widget first to avoid duplicate processes.")
+    print(f"Usage footer provider: {provider}")
     print("Re-run after switching env to re-pin the path.")
     return 0
 
@@ -245,11 +254,23 @@ def main(argv: list | None = None) -> int:
 
     p_widget = sub.add_parser("widget", help="always-on-top floating GUI panel")
     p_widget.add_argument("--interval", type=float, default=1.0, help="refresh seconds")
+    p_widget.add_argument(
+        "--usage-provider",
+        choices=USAGE_PROVIDER_CHOICES,
+        default="auto",
+        help="footer provider: auto, codex, claude, or off",
+    )
     p_widget.set_defaults(func=cmd_widget)
 
     p_install_launcher = sub.add_parser(
         "install-launcher",
         help="install a one-click launcher (macOS .app, or Windows Start menu + Desktop shortcut)",
+    )
+    p_install_launcher.add_argument(
+        "--usage-provider",
+        choices=USAGE_PROVIDER_CHOICES,
+        default="auto",
+        help="footer provider baked into the launcher: auto, codex, claude, or off",
     )
     p_install_launcher.set_defaults(func=cmd_install_launcher)
 
@@ -266,6 +287,12 @@ def main(argv: list | None = None) -> int:
     p_install_autostart.add_argument(
         "--no-launch", action="store_true",
         help="install the autostart entry but do not start the widget now (it starts at the next login)",
+    )
+    p_install_autostart.add_argument(
+        "--usage-provider",
+        choices=USAGE_PROVIDER_CHOICES,
+        default="auto",
+        help="footer provider baked into login autostart: auto, codex, claude, or off",
     )
     p_install_autostart.set_defaults(func=cmd_install_autostart)
 
