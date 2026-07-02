@@ -1,14 +1,14 @@
 # 本仓库相对上游的定制
 
 基于上游 [yzhao062/vibesignal](https://github.com/yzhao062/vibesignal) @ `510fa4e`（v0.1.1）。
-所有源码改动集中在 `vibesignal/widget.py`：
+主要源码改动集中在 `vibesignal/widget.py`、`vibesignal/installer.py` 和图标资产：
 
 | 定制 | 说明 |
 |---|---|
 | 深色主题 | 卡片底 `#111827`，白色粗体主文字，高对比状态色；blocked/error 报警态同步换深色 wash |
 | 透明度 | 0.97 → 0.95，保证白色桌面背景上文字更清楚 |
 | 停靠位置 | 左下角 → 右上角（菜单栏下 12px、右边距 14px） |
-| Dock 图标 | `scripts/render_icon.py` 生成高对比向量图标，启动时经 pyobjc 读取 `~/.local/share/vibesignal/dock-icon.png` 设置进程 Dock 图标 |
+| Dock 图标 | `assets/VibeSignal.svg` 是矢量源，`scripts/render_icon.py` 从矢量几何导出高清 PNG/ICNS；`install-launcher` 自动把图标写入 `.app` 并复制运行时 Dock 图标 |
 | Codex 额度 footer | 面板底部状态栏：Codex 5 小时和周窗口剩余比例，例如 `5h 57% (4h40m) · wk 64% (5d16h)`，白色粗体显示，每 5 分钟后台刷新 |
 
 额度数据来源：
@@ -38,18 +38,18 @@ uv tool install --force --python-preference only-managed --python 3.13 \
    ln -sfn "$PYLIB/tk9.0"  ~/.local/share/uv/tools/vibesignal/lib/tk9.0
    ```
 
-2. **Dock 图标资产**：
+2. **启动器与 Dock 图标资产**：
 
    ```bash
-   mkdir -p ~/.local/share/vibesignal
-   cp assets/dock-icon.png assets/VibeSignal.icns ~/.local/share/vibesignal/
+   vibesignal install-launcher
    ```
 
-   想换图案：改 `scripts/render_icon.py` 里的绘制参数重新生成；`.app` 启动器的图标是把
-   `assets/VibeSignal.icns` 覆盖到 `~/Applications/VibeSignal.app/Contents/Resources/applet.icns`
-   后 `codesign --force --sign -` 重签。
+   这一步会自动把包内置 `VibeSignal.icns` 覆盖到
+   `~/Applications/VibeSignal.app/Contents/Resources/applet.icns` 并重签，同时把
+   `dock-icon.png` 复制到 `~/.local/share/vibesignal/`。想换图案：改
+   `assets/VibeSignal.svg` 和 `scripts/render_icon.py` 里的绘制参数后重新生成。
 
-3. **启动器与自启**：`vibesignal install-launcher && vibesignal install-autostart`
+3. **自启**：`vibesignal install-autostart`
 
 4. **客户端 hooks**：
    - Claude Code：`hooks/claude-settings.snippet.json` 合并进 `~/.claude/settings.json`（命令建议写

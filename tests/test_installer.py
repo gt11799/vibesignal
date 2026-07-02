@@ -8,6 +8,8 @@ subprocess wrappers (`osacompile`, `launchctl bootstrap`, and the PowerShell
 tools; those are exercised manually via the CLI rather than in unit tests.
 """
 
+from pathlib import Path
+
 import pytest
 
 from vibesignal import installer
@@ -300,3 +302,45 @@ def test_macos_autostart_launch_now_controls_bootstrap(monkeypatch, tmp_path):
     runs.clear()
     installer.install_autostart(launch_now=True)
     assert any("bootstrap" in cmd for cmd in runs)         # start-now
+
+
+def test_macos_apply_icons_copies_launcher_and_runtime_icons(monkeypatch, tmp_path):
+    app = tmp_path / "VibeSignal.app"
+    icns = tmp_path / "VibeSignal.icns"
+    png = tmp_path / "dock-icon.png"
+    data_dir = tmp_path / "share" / "vibesignal"
+    icns.write_bytes(b"icns")
+    png.write_bytes(b"png")
+
+    def source(name):
+        return {"VibeSignal.icns": icns, "dock-icon.png": png}.get(name)
+
+    runs = []
+    monkeypatch.setattr(installer, "_icon_source_path", source)
+    monkeypatch.setattr(installer, "_vibesignal_data_dir", lambda: data_dir)
+    monkeypatch.setattr(installer.subprocess, "run", lambda cmd, **kw: runs.append((cmd, kw)))
+
+    installer._macos_apply_icons(app)
+
+    assert (app / "Contents" / "Resources" / "applet.icns").read_bytes() == b"icns"
+    assert (data_dir / "VibeSignal.icns").read_bytes() == b"icns"
+    assert (data_dir / "dock-icon.png").read_bytes() == b"png"
+    assert runs == [(["codesign", "--force", "--sign", "-", str(app)], {"check": True})]
+
+
+def test_macos_install_launcher_applies_icons(monkeypatch, tmp_path):
+    monkeypatch.setattr(installer, "_user_applications_dir", lambda: tmp_path)
+    monkeypatch.setattr(installer, "vibesignal_args", lambda: ["/bin/vibesignal"])
+    applied = []
+
+    def run(cmd, **kwargs):
+        if cmd[0] == "osacompile":
+            Path(cmd[cmd.index("-o") + 1]).mkdir(parents=True)
+
+    monkeypatch.setattr(installer.subprocess, "run", run)
+    monkeypatch.setattr(installer, "_macos_apply_icons", lambda app: applied.append(app))
+
+    dest = installer._macos_install_launcher()
+
+    assert dest == tmp_path / "VibeSignal.app"
+    assert applied == [dest]

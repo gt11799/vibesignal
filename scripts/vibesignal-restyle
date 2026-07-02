@@ -68,15 +68,6 @@ _USAGE = "#f8fafc"''',
         '''        try:
             self.root.attributes("-alpha", 0.95)
         except tk.TclError:
-            pass
-        try:  # custom Dock icon (managed by vibesignal-restyle)
-            import os as _os
-            from AppKit import NSApplication, NSImage
-            _img = NSImage.alloc().initWithContentsOfFile_(
-                _os.path.expanduser("~/.local/share/vibesignal/dock-icon.png"))
-            if _img:
-                NSApplication.sharedApplication().setApplicationIconImage_(_img)
-        except Exception:
             pass''',
     ),
     (

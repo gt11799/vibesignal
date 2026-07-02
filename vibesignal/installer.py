@@ -29,6 +29,8 @@ from pathlib import Path
 LAUNCH_AGENT_LABEL = "io.github.yzhao062.vibesignal"
 APP_NAME = "VibeSignal.app"
 SHORTCUT_NAME = "VibeSignal.lnk"
+ICON_NAME = "VibeSignal.icns"
+DOCK_ICON_NAME = "dock-icon.png"
 
 # Console-script filenames pip can produce. POSIX wheels create a bare
 # `vibesignal`; Windows wheels add a `.exe` launcher. Listing both keeps the
@@ -108,6 +110,23 @@ def _plist_path() -> Path:
     return _launch_agents_dir() / f"{LAUNCH_AGENT_LABEL}.plist"
 
 
+def _vibesignal_data_dir() -> Path:
+    return Path.home() / ".local" / "share" / "vibesignal"
+
+
+def _icon_source_path(name: str) -> Path | None:
+    """Find a bundled icon asset in package or source-tree installs."""
+    candidates = [
+        Path(__file__).resolve().parent / "assets" / name,
+        Path(__file__).resolve().parent.parent / "assets" / name,
+        _vibesignal_data_dir() / name,
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
 def _launchd_target() -> str:
     return f"gui/{os.getuid()}"
 
@@ -180,7 +199,28 @@ def _macos_install_launcher() -> Path:
         subprocess.run(["osacompile", "-o", str(dest), src_path], check=True)
     finally:
         Path(src_path).unlink(missing_ok=True)
+    _macos_apply_icons(dest)
     return dest
+
+
+def _macos_apply_icons(app_path: Path) -> None:
+    """Install bundled icons for both the launcher bundle and the runtime widget."""
+    data_dir = _vibesignal_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    dock_icon = _icon_source_path(DOCK_ICON_NAME)
+    if dock_icon:
+        shutil.copy2(dock_icon, data_dir / DOCK_ICON_NAME)
+
+    app_icon = _icon_source_path(ICON_NAME)
+    if not app_icon:
+        return
+
+    resources = app_path / "Contents" / "Resources"
+    resources.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(app_icon, resources / "applet.icns")
+    shutil.copy2(app_icon, data_dir / ICON_NAME)
+    subprocess.run(["codesign", "--force", "--sign", "-", str(app_path)], check=True)
 
 
 def _macos_uninstall_launcher() -> bool:

@@ -1,15 +1,11 @@
-"""Render a high-contrast VibeSignal app icon without emoji fonts."""
+"""Render the vector-drawn VibeSignal app icon without emoji fonts."""
 import sys
 
 from AppKit import (
     NSBitmapImageRep,
     NSBezierPath,
     NSColor,
-    NSFont,
-    NSFontAttributeName,
-    NSForegroundColorAttributeName,
     NSImage,
-    NSString,
 )
 from Foundation import NSMakeRect
 
@@ -53,21 +49,11 @@ img = NSImage.alloc().initWithSize_((SIZE, SIZE))
 img.lockFocus()
 
 rounded_rect(72, 72, 880, 880, 210, color("#0f172a"), color("#34d399"), 18)
-rounded_rect(166, 166, 692, 692, 156, color("#111827"), color("#475569"), 10)
+rounded_rect(184, 154, 656, 716, 156, color("#111827"), color("#64748b"), 12)
 
-circle(512, 670, 92, color("#ef4444"), color("#fee2e2"), 10)
-circle(512, 512, 92, color("#facc15"), color("#fef3c7"), 10)
-circle(512, 354, 112, color("#22c55e"), color("#dcfce7"), 12)
-
-rounded_rect(294, 155, 436, 82, 41, color("#020617", 0.72))
-
-attrs = {
-    NSFontAttributeName: NSFont.boldSystemFontOfSize_(104.0),
-    NSForegroundColorAttributeName: color("#f8fafc"),
-}
-text = NSString.stringWithString_("VS")
-box = text.sizeWithAttributes_(attrs)
-text.drawAtPoint_withAttributes_(((SIZE - box.width) / 2.0, 140.0), attrs)
+circle(512, 720, 88, color("#ef4444"), color("#fee2e2"), 12)
+circle(512, 512, 88, color("#facc15"), color("#fef3c7"), 12)
+circle(512, 304, 88, color("#22c55e"), color("#dcfce7"), 12)
 
 img.unlockFocus()
 

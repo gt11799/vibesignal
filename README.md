@@ -47,20 +47,13 @@ cp scripts/vibesignal-restyle ~/.local/bin/
 chmod +x ~/.local/bin/vibesignal-restyle
 ~/.local/bin/vibesignal-restyle
 
-mkdir -p ~/.local/share/vibesignal
-cp assets/dock-icon.png assets/VibeSignal.icns ~/.local/share/vibesignal/
-
 vibesignal install-launcher
 vibesignal install-autostart
-
-# 可选但推荐：把启动器图标也换成本仓库的 VibeSignal 图标。
-cp ~/.local/share/vibesignal/VibeSignal.icns \
-  ~/Applications/VibeSignal.app/Contents/Resources/applet.icns
-codesign --force --sign - ~/Applications/VibeSignal.app
 ```
 
 `vibesignal-restyle` 会修复 uv tool venv 里 Tcl/Tk 路径找不到的问题。每次 `uv tool install --force` 或升级后，都建议重新跑一次。
 如果只改了 hooks，不需要重启 widget；如果改了 `widget.py` 样式或图标资产，需要重启 `vibesignal widget` 才能看到新效果。
+`vibesignal install-launcher` 会自动把内置图标复制到启动器和 `~/.local/share/vibesignal/`，不需要再手动覆盖 `.app` 图标。
 
 ## 常用命令
 

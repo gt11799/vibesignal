@@ -50,18 +50,17 @@ cp scripts/vibesignal-restyle ~/.local/bin/ && chmod +x ~/.local/bin/vibesignal-
 注意：`launchctl kickstart` 在第 4 步 autostart 装好前会报错，忽略即可。
 **每次 `uv tool install --force/upgrade` 重建 venv 后，都要重跑一次本脚本。**
 
-## 4. 图标资产 + 启动器 + 自启
+## 4. 启动器 + 图标资产 + 自启
 
 ```bash
-mkdir -p ~/.local/share/vibesignal
-cp assets/dock-icon.png assets/VibeSignal.icns ~/.local/share/vibesignal/
 ~/.local/bin/vibesignal install-launcher
 ~/.local/bin/vibesignal install-autostart      # widget 立即启动并登录自启
-# 换 .app 启动器图标（可选，去掉"空白脚本"默认图标）：
-cp ~/.local/share/vibesignal/VibeSignal.icns \
-   ~/Applications/VibeSignal.app/Contents/Resources/applet.icns
-codesign --force --sign - ~/Applications/VibeSignal.app
 ```
+
+`install-launcher` 会自动把包内置图标复制到 `~/Applications/VibeSignal.app/Contents/Resources/applet.icns`
+并重签 `.app`，同时把 `dock-icon.png` 和 `VibeSignal.icns` 放到 `~/.local/share/vibesignal/`，
+供运行中的 widget 设置 Dock 图标使用。若看到默认空白脚本图标，重新运行
+`~/.local/bin/vibesignal install-launcher`。
 
 验证：`pgrep -fl "vibesignal widget"` 有进程；`tail /tmp/io.github.yzhao062.vibesignal.err` 无新报错；
 面板出现在**主屏右上角**（多显示器时在"键盘焦点所在屏"的右上角），文字为高对比白色粗体，底部 Codex 剩余额度状态栏清晰可读。

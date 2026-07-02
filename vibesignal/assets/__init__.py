@@ -1,0 +1,1 @@
+"""Bundled VibeSignal icon assets."""

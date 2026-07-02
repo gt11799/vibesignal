@@ -235,6 +235,14 @@ def _palette(agg: str) -> dict:
     return _CALM
 
 
+def _dock_icon_paths() -> list[Path]:
+    return [
+        Path.home() / ".local" / "share" / "vibesignal" / "dock-icon.png",
+        Path(__file__).resolve().parent / "assets" / "dock-icon.png",
+        Path(__file__).resolve().parent.parent / "assets" / "dock-icon.png",
+    ]
+
+
 def glyph(state: str) -> str:
     """Filled dot for live states, hollow for idle (used in the header)."""
     return "○" if state == "idle" else "●"
@@ -267,12 +275,12 @@ class Widget:
         except tk.TclError:
             pass
         try:  # custom Dock icon (managed by vibesignal-restyle)
-            import os as _os
             from AppKit import NSApplication, NSImage
-            _img = NSImage.alloc().initWithContentsOfFile_(
-                _os.path.expanduser("~/.local/share/vibesignal/dock-icon.png"))
-            if _img:
-                NSApplication.sharedApplication().setApplicationIconImage_(_img)
+            for _icon_path in _dock_icon_paths():
+                _img = NSImage.alloc().initWithContentsOfFile_(str(_icon_path))
+                if _img:
+                    NSApplication.sharedApplication().setApplicationIconImage_(_img)
+                    break
         except Exception:
             pass
         # The root acts as a 1px border so the panel reads on a light desktop.
