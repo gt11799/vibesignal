@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+"""Re-apply local vibesignal customizations after `uv tool upgrade/install vibesignal`.
+
+Upstream ships no appearance config, so the dark theme lives as source patches on
+the installed widget.py; the tool venv also needs Tcl/Tk symlinked in (uv-managed
+CPython keeps them outside the venv). Both are wiped whenever uv rebuilds the
+venv — rerun this script afterwards. It is idempotent.
+"""
+import glob
+import os
+import subprocess
+import sys
+
+TOOL = os.path.expanduser("~/.local/share/uv/tools/vibesignal")
+
+# (light-theme original, dark-theme replacement) — keep in sync with upstream widget.py
+REPLACEMENTS = [
+    (
+        '''HEX = {
+    "blocked": "#dc2626",  # red (needs you now)
+    "done": "#2563eb",     # blue
+    "working": "#16a34a",  # green
+    "error": "#9333ea",    # violet (manual failure)
+    "idle": "#9ca3af",     # grey
+}
+_BORDER = "#c9ced8"
+_BG = "#e9ecf1"      # soft cool grey card (calmer than stark white)
+_FG = "#272b31"
+_DIM = "#6b7280"
+_DIMMER = "#959ba4"
+_RULE = "#d6dae1"
+_HEADER = "#2b3038"''',
+        '''HEX = {
+    "blocked": "#ef4444",  # red (needs you now)
+    "done": "#60a5fa",     # blue
+    "working": "#34d399",  # green
+    "error": "#c084fc",    # violet (manual failure)
+    "idle": "#6b7280",     # grey
+}
+_BORDER = "#3a3f4b"
+_BG = "#1f232a"      # dark card
+_FG = "#e5e7eb"
+_DIM = "#9ca3af"
+_DIMMER = "#7b8290"
+_RULE = "#343946"
+_HEADER = "#e5e7eb"''',
+    ),
+    (
+        '''    if agg == "blocked":
+        return {"frame": "#dc2626", "header_bg": "#dc2626", "header_fg": "#ffffff",
+                "wash": "#fdecec", "alarm": True}
+    if agg == "error":
+        return {"frame": "#9333ea", "header_bg": "#9333ea", "header_fg": "#ffffff",
+                "wash": "#f5ecfd", "alarm": True}''',
+        '''    if agg == "blocked":
+        return {"frame": "#ef4444", "header_bg": "#b91c1c", "header_fg": "#ffffff",
+                "wash": "#2a1518", "alarm": True}
+    if agg == "error":
+        return {"frame": "#c084fc", "header_bg": "#7e22ce", "header_fg": "#ffffff",
+                "wash": "#241631", "alarm": True}''',
+    ),
+    (
+        '''        try:
+            self.root.attributes("-alpha", 0.97)
+        except tk.TclError:
+            pass''',
+        '''        try:
+            self.root.attributes("-alpha", 0.85)
+        except tk.TclError:
+            pass
+        try:  # custom Dock icon (managed by vibesignal-restyle)
+            import os as _os
+            from AppKit import NSApplication, NSImage
+            _img = NSImage.alloc().initWithContentsOfFile_(
+                _os.path.expanduser("~/.local/share/vibesignal/dock-icon.png"))
+            if _img:
+                NSApplication.sharedApplication().setApplicationIconImage_(_img)
+        except Exception:
+            pass''',
+    ),
+    (
+        '''    def _reposition(self):
+        self.root.update_idletasks()
+        left, _top, _right, bottom = self._screen_workarea()
+        height = self.root.winfo_height()
+        self.root.geometry(f"+{left + 14}+{bottom - height - 12}")''',
+        '''    def _reposition(self):
+        self.root.update_idletasks()
+        _left, top, right, _bottom = self._screen_workarea()
+        width = self.root.winfo_width()
+        self.root.geometry(f"+{right - width - 14}+{top + 12}")''',
+    ),
+    # ccusage usage footer: module-level fetcher
+    (
+        '''from . import resolve
+from .panel import _fmt_age''',
+        '''from . import resolve
+from .panel import _fmt_age
+
+# --- ccusage usage footer (managed by vibesignal-restyle) ---
+import json
+import os
+import subprocess
+import threading
+import urllib.request
+from datetime import datetime, timezone
+
+_CCUSAGE = "/opt/homebrew/bin/ccusage"
+
+
+def _fmt_tok(n):
+    try:
+        n = float(n)
+    except (TypeError, ValueError):
+        return "?"
+    if n >= 1e9:
+        return f"{n / 1e9:.1f}B"
+    if n >= 1e6:
+        return f"{n / 1e6:.1f}M"
+    if n >= 1e3:
+        return f"{n / 1e3:.0f}k"
+    return str(int(n))
+
+
+def _ccusage_json(*args):
+    env = dict(os.environ)
+    env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "/usr/bin:/bin")
+    out = subprocess.run([_CCUSAGE, *args, "--json", "--offline"],
+                         capture_output=True, text=True, timeout=120, env=env)
+    if out.returncode != 0:
+        return None
+    return json.loads(out.stdout)
+
+
+def _oauth_usage():
+    """Official subscription utilization, via the Claude Code OAuth token in the keychain."""
+    out = subprocess.run(
+        ["/usr/bin/security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+        capture_output=True, text=True, timeout=30)
+    if out.returncode != 0:
+        return None
+    token = json.loads(out.stdout.strip())["claudeAiOauth"]["accessToken"]
+    req = urllib.request.Request(
+        "https://api.anthropic.com/api/oauth/usage",
+        headers={"Authorization": "Bearer " + token,
+                 "anthropic-beta": "oauth-2025-04-20"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read().decode())
+
+
+def _fmt_reset(iso):
+    try:
+        secs = (datetime.fromisoformat(iso) - datetime.now(timezone.utc)).total_seconds()
+    except Exception:
+        return ""
+    if secs <= 0:
+        return ""
+    m = int(secs // 60)
+    if m >= 2880:
+        return f" ({m // 1440}d{(m % 1440) // 60}h)"
+    return f" ({m // 60}h{m % 60:02d}m)"
+
+
+def _fetch_usage():
+    parts = []
+    try:
+        u = _oauth_usage() or {}
+        for key, label in (("five_hour", "5h"), ("seven_day", "wk")):
+            w = u.get(key) or {}
+            if w.get("utilization") is not None:
+                parts.append(f"{label} {w['utilization']:.0f}%{_fmt_reset(w.get('resets_at') or '')}")
+    except Exception:
+        pass
+    try:
+        day = _ccusage_json("daily", "--since", time.strftime("%Y%m%d"))
+        tot = (day or {}).get("totals") or {}
+        if tot.get("totalCost"):
+            parts.append(f"today ${tot['totalCost']:.1f}")
+        if not any(p.startswith("5h") for p in parts):
+            blk = _ccusage_json("blocks", "--active")
+            for b in (blk or {}).get("blocks", []):
+                if b.get("isActive"):
+                    left = int((b.get("projection") or {}).get("remainingMinutes") or 0)
+                    tail = f" ({left // 60}h{left % 60:02d}m)" if left else ""
+                    parts.append(f"5h {_fmt_tok(b.get('totalTokens'))} ${b.get('costUSD', 0):.2f}{tail}")
+    except Exception:
+        pass
+    return " · ".join(parts)''',
+    ),
+    # ccusage usage footer: footer widgets + fetcher thread
+    (
+        '''        self.body.grid_columnconfigure(4, minsize=40)             # age''',
+        '''        self.body.grid_columnconfigure(4, minsize=40)             # age
+
+        self._usage_text = ""
+        self.footer = tk.Frame(self.card, bg=_BG)
+        self.footer.pack(fill="x", padx=11, pady=(0, 6))
+        self._usage_lbl = tk.Label(self.footer, text="", bg=_BG, fg=_DIMMER,
+                                   font=self._f_dim, anchor="w")
+        self._usage_lbl.pack(side="left")
+        threading.Thread(target=self._usage_loop, daemon=True).start()''',
+    ),
+    # ccusage usage footer: background refresh loop
+    (
+        '''    def _screen_workarea(self):''',
+        '''    def _usage_loop(self):
+        while True:
+            txt = _fetch_usage()
+            if txt:
+                self._usage_text = txt
+            time.sleep(300)
+
+    def _screen_workarea(self):''',
+    ),
+    # ccusage usage footer: per-tick repaint
+    (
+        '''        self._count.configure(text=(f"{len(rows)}" if rows else ""), bg=hbg,
+                              fg=("#ffffff" if pal["alarm"] else _DIMMER))''',
+        '''        self._count.configure(text=(f"{len(rows)}" if rows else ""), bg=hbg,
+                              fg=("#ffffff" if pal["alarm"] else _DIMMER))
+        self.footer.configure(bg=wash)
+        self._usage_lbl.configure(text=self._usage_text, bg=wash,
+                                  fg=("#ffffff" if pal["alarm"] else _DIMMER))''',
+    ),
+    # Tk 9 aqua: overrideredirect is ignored — force borderless via MacWindowStyle
+    (
+        '''        self.root = tk.Tk()
+        self.root.overrideredirect(True)
+        self.root.attributes("-topmost", True)''',
+        '''        self.root = tk.Tk()
+        self.root.withdraw()
+        self.root.overrideredirect(True)
+        if sys.platform == "darwin":
+            try:  # Tk 9 aqua ignores overrideredirect; force a borderless window
+                self.root.tk.call("::tk::unsupported::MacWindowStyle",
+                                  "style", self.root._w, "plain", "none")
+            except tk.TclError:
+                pass
+        self.root.attributes("-topmost", True)''',
+    ),
+    (
+        '''        self._cells: list[tk.Widget] = []
+        self._drag = (0, 0)
+        self._tick()
+        self.root.after(60, self._reposition)''',
+        '''        self._cells: list[tk.Widget] = []
+        self._drag = (0, 0)
+        self._tick()
+        self.root.deiconify()
+        self.root.attributes("-topmost", True)
+        self.root.lift()
+        self.root.after(60, self._reposition)''',
+    ),
+]
+
+
+def link_tcl():
+    """Symlink the interpreter's Tcl/Tk library dirs into the tool venv."""
+    home = None
+    with open(os.path.join(TOOL, "pyvenv.cfg")) as f:
+        for line in f:
+            if line.split("=")[0].strip() == "home":
+                home = line.split("=", 1)[1].strip()
+    if not home:
+        sys.exit("pyvenv.cfg has no 'home' key; cannot locate the base interpreter")
+    pylib = os.path.join(os.path.dirname(home), "lib")
+    for name in ("tcl9.0", "tk9.0", "tcl8.6", "tk8.6"):
+        src = os.path.join(pylib, name)
+        dst = os.path.join(TOOL, "lib", name)
+        if os.path.isdir(src) and not os.path.exists(dst):
+            os.symlink(src, dst)
+            print(f"linked {dst} -> {src}")
+
+
+def patch_widget():
+    paths = glob.glob(os.path.join(TOOL, "lib/python*/site-packages/vibesignal/widget.py"))
+    if not paths:
+        sys.exit("widget.py not found; is vibesignal installed via uv tool?")
+    path = paths[0]
+    with open(path) as f:
+        src = f.read()
+    changed = False
+    for old, new in REPLACEMENTS:
+        if new in src:
+            continue
+        if old not in src:
+            print(f"WARNING: upstream widget.py changed; pattern not found:\n  {old.splitlines()[0]}…")
+            continue
+        src = src.replace(old, new)
+        changed = True
+    if changed:
+        with open(path, "w") as f:
+            f.write(src)
+        print(f"patched {path}")
+    else:
+        print("widget.py already patched")
+
+
+def restart_widget():
+    subprocess.run(
+        ["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/io.github.yzhao062.vibesignal"],
+        check=False,
+    )
+    print("widget restarted")
+
+
+if __name__ == "__main__":
+    link_tcl()
+    patch_widget()
+    restart_widget()

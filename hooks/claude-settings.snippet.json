@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "vibesignal event --agent claude --state working --quiet" } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "vibesignal event --agent claude --state working --quiet" } ] }
+    ],
+    "Notification": [
+      { "matcher": "permission_prompt", "hooks": [ { "type": "command", "command": "vibesignal event --agent claude --state blocked --quiet" } ] },
+      { "matcher": "idle_prompt", "hooks": [ { "type": "command", "command": "vibesignal event --agent claude --state done --quiet" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "vibesignal event --agent claude --state done --quiet" } ] }
+    ],
+    "StopFailure": [
+      { "hooks": [ { "type": "command", "command": "vibesignal event --agent claude --state done --quiet" } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "vibesignal end --agent claude --quiet" } ] }
+    ]
+  }
+}

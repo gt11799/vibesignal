@@ -1,0 +1,107 @@
+#!/Users/kris.gong/.local/share/uv/tools/vibesignal/bin/python
+"""Bridge Cowork (Claude.app local VM) activity into the vibesignal panel.
+
+Cowork runs its agent inside a local Linux VM (Virtualization.framework), so
+host-side Claude Code hooks never fire for it. This watcher approximates a
+status row from the host using two signals:
+
+  1. CPU of the VM process — a working agent burns CPU (idle-warm VM: ~0.5%,
+     threshold default 5%). ps %cpu is a decaying average, which smooths
+     brief API-wait dips.
+  2. Writes under the app's session storage, excluding known idle noise
+     (rpm/ heartbeats, skills-plugin syncs, VM disk images' housekeeping).
+
+Either signal within the QUIET window keeps the row "working"; sustained
+silence flips it to "done" (vibesignal then TTL-expires the row). Granularity
+is one aggregate row (session "local-vm") — per-task states like blocked
+happen inside the VM and are not observable from the host.
+
+Env overrides (mainly for testing):
+  COWORK_BRIDGE_WATCH      colon-separated dirs for the file signal
+  COWORK_BRIDGE_QUIET      seconds of silence before "done" (default 180)
+  COWORK_BRIDGE_POLL       poll interval seconds (default 20)
+  COWORK_BRIDGE_CPU_MIN    %cpu threshold for the VM signal (default 5.0)
+Run with --once for a single check (prints the decision, no loop).
+"""
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+VS = Path.home() / ".local/bin/vibesignal"
+APP = Path.home() / "Library/Application Support/Claude"
+WATCH = [Path(p) for p in os.environ.get(
+    "COWORK_BRIDGE_WATCH", str(APP / "local-agent-mode-sessions")).split(":")]
+EXCLUDE_PARTS = ("/rpm/", "/skills-plugin/")
+QUIET = float(os.environ.get("COWORK_BRIDGE_QUIET", 180))
+POLL = float(os.environ.get("COWORK_BRIDGE_POLL", 20))
+CPU_MIN = float(os.environ.get("COWORK_BRIDGE_CPU_MIN", 5.0))
+SESSION = "local-vm"
+
+
+def latest_mtime() -> float:
+    newest = 0.0
+    for root in WATCH:
+        for dirpath, _dirnames, filenames in os.walk(root):
+            if any(part in dirpath + "/" for part in EXCLUDE_PARTS):
+                continue
+            for name in filenames:
+                try:
+                    newest = max(newest, os.stat(os.path.join(dirpath, name)).st_mtime)
+                except OSError:
+                    pass
+    return newest
+
+
+def vm_cpu() -> float:
+    """Summed %cpu of all Virtualization.framework VM processes (0.0 if none)."""
+    out = subprocess.run(["ps", "-axo", "%cpu=,comm="],
+                         capture_output=True, text=True, timeout=15)
+    total = 0.0
+    for line in out.stdout.splitlines():
+        parts = line.strip().split(None, 1)
+        if len(parts) == 2 and "Virtualization.VirtualMachine" in parts[1]:
+            try:
+                total += float(parts[0])
+            except ValueError:
+                pass
+    return total
+
+
+def send(state: str) -> None:
+    subprocess.run(
+        [str(VS), "event", "--agent", "cowork", "--state", state,
+         "--session", SESSION, "--project", "cowork-vm", "--quiet"],
+        capture_output=True, timeout=30)
+
+
+def main() -> int:
+    once = "--once" in sys.argv
+    active = False
+    last_active = 0.0
+    while True:
+        now = time.time()
+        cpu = vm_cpu()
+        last_active = max(last_active, latest_mtime())
+        if cpu >= CPU_MIN:
+            last_active = now
+        idle = now - last_active
+        if idle < QUIET:
+            send("working")
+            active = True
+            decision = f"working (cpu {cpu:.1f}%, idle {idle:.0f}s)"
+        elif active:
+            send("done")
+            active = False
+            decision = f"done (cpu {cpu:.1f}%, idle {idle:.0f}s)"
+        else:
+            decision = f"quiet (cpu {cpu:.1f}%, idle {idle:.0f}s)"
+        if once:
+            print(decision)
+            return 0
+        time.sleep(POLL)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
