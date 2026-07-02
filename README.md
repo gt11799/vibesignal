@@ -110,7 +110,9 @@ Codex hooks 覆盖这些事件：
 - `PermissionRequest`：标记为 blocked。
 - `Stop`：标记为 done。
 
-合并后重启 Codex，并在 Codex 会话里执行 `/hooks`，信任新增的 VibeSignal hooks。之后跑一轮 Codex 对话，`vibesignal status` 应该能看到 `codex/<session>`。
+合并后重启 Codex，并在 Codex 会话里执行 `/hooks`，信任新增的 VibeSignal hooks。
+未信任的 command hooks 会被 Codex 跳过；信任后再跑一轮 Codex 对话，`vibesignal status`
+应该能看到 `codex/<session>`。
 
 ## Codex 剩余额度展示
 
