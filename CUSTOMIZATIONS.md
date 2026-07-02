@@ -5,11 +5,11 @@
 
 | 定制 | 说明 |
 |---|---|
-| 深色主题 | 卡片底 `#1f232a`，高对比状态色；blocked/error 报警态同步换深色 wash |
-| 透明度 | 0.97 → 0.85 |
+| 深色主题 | 卡片底 `#111827`，白色粗体主文字，高对比状态色；blocked/error 报警态同步换深色 wash |
+| 透明度 | 0.97 → 0.95，保证白色桌面背景上文字更清楚 |
 | 停靠位置 | 左下角 → 右上角（菜单栏下 12px、右边距 14px） |
-| Dock 图标 | 启动时经 pyobjc 读取 `~/.local/share/vibesignal/dock-icon.png` 设置进程 Dock 图标 |
-| Codex 额度 footer | 面板底部一行：Codex 5 小时和周窗口剩余比例，例如 `5h 57% (4h40m) · wk 64% (5d16h)`，每 5 分钟后台刷新 |
+| Dock 图标 | `scripts/render_icon.py` 生成高对比向量图标，启动时经 pyobjc 读取 `~/.local/share/vibesignal/dock-icon.png` 设置进程 Dock 图标 |
+| Codex 额度 footer | 面板底部状态栏：Codex 5 小时和周窗口剩余比例，例如 `5h 57% (4h40m) · wk 64% (5d16h)`，白色粗体显示，每 5 分钟后台刷新 |
 
 额度数据来源：
 
@@ -41,10 +41,11 @@ uv tool install --force --python-preference only-managed --python 3.13 \
 2. **Dock 图标资产**：
 
    ```bash
-   mkdir -p ~/.local/share/vibesignal && cp assets/dock-icon.png ~/.local/share/vibesignal/
+   mkdir -p ~/.local/share/vibesignal
+   cp assets/dock-icon.png assets/VibeSignal.icns ~/.local/share/vibesignal/
    ```
 
-   想换图案：改 `scripts/render_icon.py` 里的 emoji 重新生成；`.app` 启动器的图标是把
+   想换图案：改 `scripts/render_icon.py` 里的绘制参数重新生成；`.app` 启动器的图标是把
    `assets/VibeSignal.icns` 覆盖到 `~/Applications/VibeSignal.app/Contents/Resources/applet.icns`
    后 `codesign --force --sign -` 重签。
 

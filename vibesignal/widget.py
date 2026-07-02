@@ -210,13 +210,14 @@ HEX = {
     "error": "#c084fc",    # violet (manual failure)
     "idle": "#6b7280",     # grey
 }
-_BORDER = "#3a3f4b"
-_BG = "#1f232a"      # dark card
-_FG = "#e5e7eb"
-_DIM = "#9ca3af"
-_DIMMER = "#7b8290"
-_RULE = "#343946"
-_HEADER = "#e5e7eb"
+_BORDER = "#020617"
+_BG = "#111827"      # high-contrast dark card
+_FG = "#ffffff"
+_DIM = "#d1d5db"
+_DIMMER = "#c3cad5"
+_RULE = "#4b5563"
+_HEADER = "#ffffff"
+_USAGE = "#f8fafc"
 
 # When a session needs you, the whole panel goes red (violet for a manual error),
 # not just one row, so a blocked session is unmissable across several windows. Other
@@ -262,7 +263,7 @@ class Widget:
                 pass
         self.root.attributes("-topmost", True)
         try:
-            self.root.attributes("-alpha", 0.85)
+            self.root.attributes("-alpha", 0.95)
         except tk.TclError:
             pass
         try:  # custom Dock icon (managed by vibesignal-restyle)
@@ -280,10 +281,11 @@ class Widget:
         self.card.pack(fill="both", expand=True, padx=1, pady=1)
 
         fam = _font_family()
-        self._f_title = tkfont.Font(family=fam, size=9, weight="bold")
-        self._f_proj = tkfont.Font(family=fam, size=9)
-        self._f_dim = tkfont.Font(family=fam, size=8)
-        self._f_dot = tkfont.Font(family=fam, size=10)
+        self._f_title = tkfont.Font(family=fam, size=11, weight="bold")
+        self._f_proj = tkfont.Font(family=fam, size=11, weight="bold")
+        self._f_dim = tkfont.Font(family=fam, size=10, weight="bold")
+        self._f_usage = tkfont.Font(family=fam, size=10, weight="bold")
+        self._f_dot = tkfont.Font(family=fam, size=12, weight="bold")
 
         self.header = tk.Frame(self.card, bg=_BG)
         self.header.pack(fill="x", padx=11, pady=(5, 4))
@@ -299,22 +301,27 @@ class Widget:
         self._rule.pack(fill="x", padx=11)
 
         self.body = tk.Frame(self.card, bg=_BG)
-        self.body.pack(fill="both", expand=True, padx=(8, 12), pady=(5, 8))
+        self.body.pack(fill="both", expand=True, padx=(8, 12), pady=(6, 8))
         self.body.grid_columnconfigure(0, minsize=4)              # accent bar
-        self.body.grid_columnconfigure(1, minsize=118, weight=1)  # project
-        self.body.grid_columnconfigure(2, minsize=46)             # agent
-        self.body.grid_columnconfigure(3, minsize=54)             # state
-        self.body.grid_columnconfigure(4, minsize=40)             # age
+        self.body.grid_columnconfigure(1, minsize=128, weight=1)  # project
+        self.body.grid_columnconfigure(2, minsize=52)             # agent
+        self.body.grid_columnconfigure(3, minsize=62)             # state
+        self.body.grid_columnconfigure(4, minsize=46)             # age
 
         self._usage_text = ""
+        self._footer_rule = tk.Frame(self.card, bg=_RULE, height=1)
+        self._footer_rule.pack(fill="x", padx=11, pady=(0, 4))
         self.footer = tk.Frame(self.card, bg=_BG)
-        self.footer.pack(fill="x", padx=11, pady=(0, 6))
-        self._usage_lbl = tk.Label(self.footer, text="", bg=_BG, fg=_DIMMER,
-                                   font=self._f_dim, anchor="w")
+        self.footer.pack(fill="x", padx=11, pady=(0, 7))
+        self._usage_lbl = tk.Label(self.footer, text="", bg=_BG, fg=_USAGE,
+                                   font=self._f_usage, anchor="w")
         self._usage_lbl.pack(side="left")
         threading.Thread(target=self._usage_loop, daemon=True).start()
 
-        for w in (self.root, self.card, self.header, self._agg_dot, self._title, self._count):
+        for w in (
+            self.root, self.card, self.header, self._agg_dot, self._title, self._count,
+            self.footer, self._footer_rule, self._usage_lbl,
+        ):
             w.bind("<Button-1>", self._start_drag)
             w.bind("<B1-Motion>", self._on_drag)
             w.bind("<Button-3>", self._menu)
@@ -431,8 +438,9 @@ class Widget:
         self._count.configure(text=(f"{len(rows)}" if rows else ""), bg=hbg,
                               fg=("#ffffff" if pal["alarm"] else _DIMMER))
         self.footer.configure(bg=wash)
+        self._footer_rule.configure(bg=("#ffffff" if pal["alarm"] else _RULE))
         self._usage_lbl.configure(text=self._usage_text, bg=wash,
-                                  fg=("#ffffff" if pal["alarm"] else _DIMMER))
+                                  fg=("#ffffff" if pal["alarm"] else _USAGE))
 
         for w in self._cells:
             w.destroy()

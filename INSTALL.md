@@ -1,13 +1,13 @@
 # AI 安装指南 —— 在新 Mac 上完整部署本套件
 
 > 读者：执行迁移安装的 AI agent（Claude Code / Codex 等）。
-> 目标：把本仓库的定制版 vibesignal 及全部周边（hooks、图标、用量 footer、Cowork 桥接）在一台新 Mac 上恢复到与源机器一致的状态。
+> 目标：把本仓库的定制版 vibesignal 及全部周边（hooks、图标、Codex 剩余额度 footer、Cowork 桥接）在一台新 Mac 上恢复到与源机器一致的状态。
 > 原则：每步都有验证命令，验证不过不要进入下一步。标注 **[需要人类]** 的步骤 AI 无法代劳，必须明确请用户操作。
 
 ## 0. 这套东西是什么
 
 - **vibesignal**（本仓库，fork 自 yzhao062/vibesignal）：AI 编码客户端的桌面状态面板。
-  定制内容见 `CUSTOMIZATIONS.md`（深色主题、右上角停靠、Tk 9 无边框修复、Dock 图标、Codex 额度 footer）。
+  定制内容见 `CUSTOMIZATIONS.md`（高对比深色主题、右上角停靠、Tk 9 无边框修复、Dock 图标、Codex 剩余额度 footer）。
 - **hooks**：Claude Code（`~/.claude/settings.json`）和 Codex（`~/.codex/hooks.json`）在会话事件时调 `vibesignal event` 上报状态。
 - **Cowork 桥接**（`scripts/cowork-vibesignal-bridge`）：Claude.app 的 Cowork 跑在本地 VM 里、hooks 够不到，用 VM 进程 CPU + 文件活动近似出状态行。
 - **能力边界**：只覆盖本机执行的会话。云端会话（claude.ai cloud）原理上不可见，不要试图"修"它。
@@ -64,7 +64,7 @@ codesign --force --sign - ~/Applications/VibeSignal.app
 ```
 
 验证：`pgrep -fl "vibesignal widget"` 有进程；`tail /tmp/io.github.yzhao062.vibesignal.err` 无新报错；
-面板出现在**主屏右上角**（多显示器时在"键盘焦点所在屏"的右上角）。
+面板出现在**主屏右上角**（多显示器时在"键盘焦点所在屏"的右上角），文字为高对比白色粗体，底部 Codex 剩余额度状态栏清晰可读。
 
 ## 5. Claude Code hooks
 
@@ -125,7 +125,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.github.yzhao062.vibes
 | # | 检查 | 期望 |
 |---|---|---|
 | 1 | `pgrep -fl "vibesignal widget"` | 有进程 |
-| 2 | 面板外观 | 深色、无边框、右上角、压在其他窗口之上 |
+| 2 | 面板外观 | 深色、无边框、右上角、压在其他窗口之上，白底桌面上文字清楚 |
 | 3 | 新开 claude 会话发消息 | 面板出现 claude 行（绿色 working） |
 | 4 | Codex 跑一轮对话 | 面板出现 codex 行 |
 | 5 | footer | 显示 `5h x% (…) · wk x% (…)` |

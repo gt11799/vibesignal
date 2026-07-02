@@ -9,7 +9,7 @@ VibeSignal 是一个给 AI 编码工具用的桌面状态面板和 USB 状态灯
 ## 主要特性
 
 - 桌面浮窗：始终置顶、可拖拽、右键退出，读取同一份会话状态。
-- 页面美化：深色主题、右上角停靠、更低透明度、blocked/error 高亮报警态。
+- 页面美化：高对比深色主题、右上角停靠、清晰白字、blocked/error 高亮报警态。
 - Claude Code 支持：通过 hooks 自动上报 working、blocked、done 和 SessionEnd。
 - Codex 进程支持：通过 Codex hooks 把本地 Codex 会话纳入同一个状态面板。
 - Codex 剩余额度展示：面板底部显示 5 小时窗口和周窗口的剩余比例与重置倒计时。
@@ -52,9 +52,15 @@ cp assets/dock-icon.png assets/VibeSignal.icns ~/.local/share/vibesignal/
 
 vibesignal install-launcher
 vibesignal install-autostart
+
+# 可选但推荐：把启动器图标也换成本仓库的 VibeSignal 图标。
+cp ~/.local/share/vibesignal/VibeSignal.icns \
+  ~/Applications/VibeSignal.app/Contents/Resources/applet.icns
+codesign --force --sign - ~/Applications/VibeSignal.app
 ```
 
 `vibesignal-restyle` 会修复 uv tool venv 里 Tcl/Tk 路径找不到的问题。每次 `uv tool install --force` 或升级后，都建议重新跑一次。
+如果只改了 hooks，不需要重启 widget；如果改了 `widget.py` 样式或图标资产，需要重启 `vibesignal widget` 才能看到新效果。
 
 ## 常用命令
 
@@ -99,9 +105,54 @@ echo '{"session_id":"claude-test"}' \
   | ~/.local/bin/vibesignal end --agent claude --quiet
 ```
 
-## 配置 Codex
+## Codex 支持 AI 操作手册
 
-把 `hooks/codex-hooks.snippet.json` 合并到 `~/.codex/hooks.json`。如果 hook 环境找不到 `vibesignal`，同样把命令改成绝对路径。
+目标：让 AI agent 在本机 Codex 运行时，通过 Codex command hooks 自动把当前会话写入 VibeSignal 状态库。完成后，Codex 正在执行任务时面板应出现 `codex/<session>` 行，并显示 `working`、`blocked` 或 `done`。
+
+### 1. 前置检查
+
+```bash
+command -v ~/.local/bin/vibesignal
+~/.local/bin/vibesignal status
+test -f hooks/codex-hooks.snippet.json
+```
+
+如果 `~/.local/bin/vibesignal` 不存在，先按上面的安装步骤安装。本仓库建议 hook 命令始终使用绝对路径，因为 Codex hook 环境不一定包含 `~/.local/bin`。
+
+### 2. 合并 hooks
+
+把 `hooks/codex-hooks.snippet.json` 合并到 `~/.codex/hooks.json`，不要覆盖用户已有 hooks。合并后把 snippet 中的 `vibesignal` 命令替换成 `~/.local/bin/vibesignal` 的绝对路径。
+
+可由 AI agent 直接执行的安全合并示例：
+
+```bash
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+home = Path.home()
+target = home / ".codex" / "hooks.json"
+snippet = Path("hooks/codex-hooks.snippet.json")
+target.parent.mkdir(parents=True, exist_ok=True)
+
+base = json.loads(target.read_text()) if target.exists() else {}
+patch = json.loads(snippet.read_text())
+base.setdefault("hooks", {})
+
+for event, entries in patch["hooks"].items():
+    fixed_entries = json.loads(json.dumps(entries).replace(
+        "vibesignal event",
+        str(home / ".local/bin/vibesignal") + " event",
+    ))
+    base["hooks"].setdefault(event, [])
+    for entry in fixed_entries:
+        if entry not in base["hooks"][event]:
+            base["hooks"][event].append(entry)
+
+target.write_text(json.dumps(base, indent=2, ensure_ascii=False) + "\n")
+print(target)
+PY
+```
 
 Codex hooks 覆盖这些事件：
 
@@ -110,9 +161,50 @@ Codex hooks 覆盖这些事件：
 - `PermissionRequest`：标记为 blocked。
 - `Stop`：标记为 done。
 
-合并后重启 Codex，并在 Codex 会话里执行 `/hooks`，信任新增的 VibeSignal hooks。
-未信任的 command hooks 会被 Codex 跳过；信任后再跑一轮 Codex 对话，`vibesignal status`
-应该能看到 `codex/<session>`。
+### 3. 信任 hooks
+
+Codex command hooks 需要用户信任后才会执行。合并 `~/.codex/hooks.json` 后：
+
+1. 重启 Codex 客户端或新开一个 Codex 会话。
+2. 在 Codex 会话里执行 `/hooks`。
+3. 确认 `~/.codex/hooks.json` 下的 4 条 VibeSignal command hooks 已列出。
+4. 信任这些 hooks。
+
+未信任时，Codex 会跳过 command hooks，VibeSignal 面板不会显示正在执行的 Codex 任务。
+
+### 4. 验证
+
+先做 pipe-test，确认 VibeSignal 命令本身可以写状态：
+
+```bash
+echo '{"session_id":"codex-pipetest","cwd":"'$PWD'"}' \
+  | ~/.local/bin/vibesignal event --agent codex --state working --quiet
+~/.local/bin/vibesignal status
+echo '{"session_id":"codex-pipetest"}' \
+  | ~/.local/bin/vibesignal end --agent codex --quiet
+```
+
+再做真实验证：信任 hooks 后，在 Codex 里发一条会触发工具调用的消息，然后运行：
+
+```bash
+~/.local/bin/vibesignal status
+```
+
+期望看到类似：
+
+```text
+aggregate: working
+  codex/<session-id>: working project=<repo-name>
+```
+
+如果只改了 hooks，不需要重启 `vibesignal widget`，面板会读取同一份状态库并自动刷新。
+
+### 5. 排障
+
+- `vibesignal status` 看不到 `codex/...`：优先确认 `/hooks` 里已经信任 VibeSignal hooks。
+- pipe-test 可用但真实 Codex 不触发：重启 Codex 或新开会话，再执行 `/hooks` 检查信任状态。
+- hook 报找不到命令：把 `~/.codex/hooks.json` 里的命令改成 `$HOME/.local/bin/vibesignal` 的绝对路径。
+- 状态显示 `done` 后没有立即消失：Codex 没有 SessionEnd 事件，会话行靠 TTL 过期，这是预期行为。
 
 ## Codex 剩余额度展示
 
