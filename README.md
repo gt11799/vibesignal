@@ -4,7 +4,7 @@ VibeSignal 是一个给 AI 编码工具用的桌面状态面板和 USB 状态灯
 
 源码仓库：<https://github.com/gt11799/vibesignal>
 
-本仓库基于上游 `yzhao062/vibesignal` 做了本地化定制，重点是把桌面面板做得更适合长期常驻使用，并增加 Codex 与 Claude Code 用量信息的展示。
+本仓库基于上游 `yzhao062/vibesignal` 做了本地化定制，重点是把桌面面板做得更适合长期常驻使用，并增加 Codex 剩余额度信息的展示。
 
 ## 主要特性
 
@@ -12,7 +12,7 @@ VibeSignal 是一个给 AI 编码工具用的桌面状态面板和 USB 状态灯
 - 页面美化：深色主题、右上角停靠、更低透明度、blocked/error 高亮报警态。
 - Claude Code 支持：通过 hooks 自动上报 working、blocked、done 和 SessionEnd。
 - Codex 进程支持：通过 Codex hooks 把本地 Codex 会话纳入同一个状态面板。
-- Claude Code 使用量展示：面板底部显示 5 小时窗口、周窗口和今日 ccusage 成本。
+- Codex 剩余额度展示：面板底部显示 5 小时窗口和周窗口的剩余比例与重置倒计时。
 - Cowork 桥接：可把 Claude.app Cowork 本地 VM 的活动近似显示为 `cowork/local-vm`。
 - 多会话聚合：多个 agent 同时跑时按 `blocked > error > done > working > idle` 聚合。
 - 多种展示方式：USB busylight、终端 watch 面板、Tk 桌面 widget。
@@ -112,26 +112,21 @@ Codex hooks 覆盖这些事件：
 
 合并后重启 Codex，并在 Codex 会话里执行 `/hooks`，信任新增的 VibeSignal hooks。之后跑一轮 Codex 对话，`vibesignal status` 应该能看到 `codex/<session>`。
 
-## Claude Code 用量展示
+## Codex 剩余额度展示
 
 桌面面板底部会尝试显示：
 
 ```text
-5h 24% (4h16m) · wk 11% (6d16h) · today $93.7
+5h 57% (4h40m) · wk 64% (5d16h)
 ```
 
 数据来源：
 
-- 5 小时和周窗口百分比：读取 macOS 钥匙串里的 Claude Code OAuth token，请求 Anthropic 的用量接口。
-- 今日成本：调用本机 `ccusage`。
+- 读取 `~/.codex/auth.json` 里的 Codex ChatGPT 登录态 access token。
+- 优先请求 Codex 的 ChatGPT 后端 usage 接口；接口不可用时，读取本机 `~/.codex/sessions/**/*.jsonl` 里最新的 `rate_limits`。
+- 面板显示的是剩余比例：`100 - used_percent`，并附带 reset 倒计时。
 
-安装 `ccusage`：
-
-```bash
-npm install -g ccusage
-```
-
-如果钥匙串授权或非公开用量接口不可用，面板会自动降级，只显示 ccusage 能拿到的信息，不影响会话状态展示。
+如果没有登录 Codex，且本机还没有带 `rate_limits` 的 Codex session 日志，footer 会留空，不影响会话状态展示。
 
 ## Cowork 桥接
 

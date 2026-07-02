@@ -24,95 +24,168 @@ import tkinter.font as tkfont
 from . import resolve
 from .panel import _fmt_age
 
-# --- ccusage usage footer (managed by vibesignal-restyle) ---
+# --- Codex rate-limit footer (managed by vibesignal-restyle) ---
 import json
 import os
-import subprocess
 import threading
 import urllib.request
+from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 
-_CCUSAGE = "/opt/homebrew/bin/ccusage"
+_CODEX_USAGE_URL = "https://chatgpt.com/backend-api/codex/usage"
 
 
-def _fmt_tok(n):
+def _codex_home() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
+
+
+def _codex_access_token() -> str | None:
     try:
-        n = float(n)
-    except (TypeError, ValueError):
-        return "?"
-    if n >= 1e9:
-        return f"{n / 1e9:.1f}B"
-    if n >= 1e6:
-        return f"{n / 1e6:.1f}M"
-    if n >= 1e3:
-        return f"{n / 1e3:.0f}k"
-    return str(int(n))
-
-
-def _ccusage_json(*args):
-    env = dict(os.environ)
-    env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "/usr/bin:/bin")
-    out = subprocess.run([_CCUSAGE, *args, "--json", "--offline"],
-                         capture_output=True, text=True, timeout=120, env=env)
-    if out.returncode != 0:
+        data = json.loads((_codex_home() / "auth.json").read_text(encoding="utf-8"))
+    except Exception:
         return None
-    return json.loads(out.stdout)
+    token = ((data.get("tokens") or {}).get("access_token")
+             if isinstance(data, dict) else None)
+    return token if isinstance(token, str) and token else None
 
 
-def _oauth_usage():
-    """Official subscription utilization, via the Claude Code OAuth token in the keychain."""
-    out = subprocess.run(
-        ["/usr/bin/security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
-        capture_output=True, text=True, timeout=30)
-    if out.returncode != 0:
+def _codex_usage_json():
+    token = _codex_access_token()
+    if not token:
         return None
-    token = json.loads(out.stdout.strip())["claudeAiOauth"]["accessToken"]
     req = urllib.request.Request(
-        "https://api.anthropic.com/api/oauth/usage",
-        headers={"Authorization": "Bearer " + token,
-                 "anthropic-beta": "oauth-2025-04-20"})
+        _CODEX_USAGE_URL,
+        headers={
+            "Authorization": "Bearer " + token,
+            "Accept": "application/json",
+            "User-Agent": "vibesignal",
+        },
+    )
     with urllib.request.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read().decode())
 
 
-def _fmt_reset(iso):
+def _codex_session_usage_json():
+    sessions = _codex_home() / "sessions"
     try:
-        secs = (datetime.fromisoformat(iso) - datetime.now(timezone.utc)).total_seconds()
+        paths = sorted(
+            sessions.glob("**/*.jsonl"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )[:12]
     except Exception:
-        return ""
-    if secs <= 0:
+        return None
+    for path in paths:
+        try:
+            with path.open(encoding="utf-8", errors="replace") as fh:
+                lines = deque(fh, maxlen=2000)
+        except Exception:
+            continue
+        for line in reversed(lines):
+            try:
+                event = json.loads(line)
+            except Exception:
+                continue
+            payload = event.get("payload") if isinstance(event, dict) else None
+            rate = event.get("rate_limits") or (
+                payload.get("rate_limits") if isinstance(payload, dict) else None
+            )
+            if isinstance(rate, dict):
+                return {"rate_limit": rate}
+    return None
+
+
+def _num(value):
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_present(data: dict, *keys: str):
+    for key in keys:
+        if key in data:
+            return data[key]
+    return None
+
+
+def _reset_seconds(window: dict) -> float | None:
+    direct = _num(_first_present(window, "reset_after_seconds", "resetAfterSeconds"))
+    if direct is not None:
+        return direct
+    reset_at = _first_present(window, "reset_at", "resets_at", "resetsAt")
+    epoch = _num(reset_at)
+    if epoch is not None:
+        return epoch - time.time()
+    if isinstance(reset_at, str):
+        try:
+            reset_at = reset_at.replace("Z", "+00:00")
+            return (datetime.fromisoformat(reset_at) - datetime.now(timezone.utc)).total_seconds()
+        except ValueError:
+            return None
+    return None
+
+
+def _fmt_reset_seconds(secs):
+    secs = _num(secs)
+    if secs is None or secs <= 0:
         return ""
     m = int(secs // 60)
     if m >= 2880:
-        return f" ({m // 1440}d{(m % 1440) // 60}h)"
+        return f" ({m // 1440}d{(m % 1440) // 60:02d}h)"
     return f" ({m // 60}h{m % 60:02d}m)"
 
 
-def _fetch_usage():
+def _remaining_percent(window: dict) -> float | None:
+    remaining = _num(_first_present(window, "remaining_percent", "remainingPercent"))
+    if remaining is not None:
+        return max(0, min(100, remaining))
+    used = _num(_first_present(window, "used_percent", "usedPercent"))
+    if used is None:
+        return None
+    return max(0, min(100, 100 - used))
+
+
+def _format_codex_window(label: str, window: dict) -> str | None:
+    if not isinstance(window, dict):
+        return None
+    remaining = _remaining_percent(window)
+    if remaining is None:
+        return None
+    reset = _fmt_reset_seconds(_reset_seconds(window))
+    return f"{label} {remaining:.0f}%{reset}"
+
+
+def _format_codex_usage(data: dict | None) -> str:
+    if not isinstance(data, dict):
+        return ""
+    rate = data.get("rate_limit") or data.get("rateLimit") or {}
+    if not isinstance(rate, dict):
+        return ""
     parts = []
-    try:
-        u = _oauth_usage() or {}
-        for key, label in (("five_hour", "5h"), ("seven_day", "wk")):
-            w = u.get(key) or {}
-            if w.get("utilization") is not None:
-                parts.append(f"{label} {w['utilization']:.0f}%{_fmt_reset(w.get('resets_at') or '')}")
-    except Exception:
-        pass
-    try:
-        day = _ccusage_json("daily", "--since", time.strftime("%Y%m%d"))
-        tot = (day or {}).get("totals") or {}
-        if tot.get("totalCost"):
-            parts.append(f"today ${tot['totalCost']:.1f}")
-        if not any(p.startswith("5h") for p in parts):
-            blk = _ccusage_json("blocks", "--active")
-            for b in (blk or {}).get("blocks", []):
-                if b.get("isActive"):
-                    left = int((b.get("projection") or {}).get("remainingMinutes") or 0)
-                    tail = f" ({left // 60}h{left % 60:02d}m)" if left else ""
-                    parts.append(f"5h {_fmt_tok(b.get('totalTokens'))} ${b.get('costUSD', 0):.2f}{tail}")
-    except Exception:
-        pass
+    for key, camel, direct, label in (("primary_window", "primaryWindow", "primary", "5h"),
+                                      ("secondary_window", "secondaryWindow", "secondary", "wk")):
+        window = _first_present(rate, key, camel, direct)
+        part = _format_codex_window(label, window)
+        if part:
+            parts.append(part)
     return " · ".join(parts)
+
+
+def _fetch_usage():
+    try:
+        text = _format_codex_usage(_codex_usage_json())
+        if text:
+            return text
+    except Exception:
+        pass
+    try:
+        return _format_codex_usage(_codex_session_usage_json())
+    except Exception:
+        return ""
 
 
 def _font_family() -> str:

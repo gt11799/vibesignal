@@ -9,14 +9,14 @@
 | 透明度 | 0.97 → 0.85 |
 | 停靠位置 | 左下角 → 右上角（菜单栏下 12px、右边距 14px） |
 | Dock 图标 | 启动时经 pyobjc 读取 `~/.local/share/vibesignal/dock-icon.png` 设置进程 Dock 图标 |
-| 用量 footer | 面板底部一行：官方订阅百分比 `5h 24% (4h16m) · wk 11% (6d16h)` + ccusage 今日成本 `today $93.7`，每 5 分钟后台刷新 |
+| Codex 额度 footer | 面板底部一行：Codex 5 小时和周窗口剩余比例，例如 `5h 57% (4h40m) · wk 64% (5d16h)`，每 5 分钟后台刷新 |
 
-用量数据来源：
+额度数据来源：
 
-- **官方百分比**：从 macOS 钥匙串读 Claude Code 的 OAuth token（条目 `Claude Code-credentials`），调
-  `https://api.anthropic.com/api/oauth/usage`（非公开接口，失效时自动降级）；
-- **今日成本 / 降级展示**：[ccusage](https://github.com/ryoppippi/ccusage)（需 `npm i -g ccusage`，
-  代码里硬编码 `/opt/homebrew/bin/ccusage`）。
+- 优先从 `~/.codex/auth.json` 读取 Codex ChatGPT 登录态 access token，调
+  `https://chatgpt.com/backend-api/codex/usage`；
+- 接口不可用时读取本机 `~/.codex/sessions/**/*.jsonl` 最新 `rate_limits`；
+- UI 显示剩余比例（`100 - used_percent`）和 reset 倒计时。没有可用额度数据时 footer 留空，不影响状态面板。
 
 ## 安装
 

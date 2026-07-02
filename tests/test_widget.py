@@ -75,6 +75,6 @@ def test_widget_constructs_and_renders_one_tick(monkeypatch):
         assert "claude" in texts   # agent
         assert "blocked" in texts  # state
         # Whole-panel alarm: a blocked aggregate turns the frame red.
-        assert str(w.root.cget("bg")) == "#dc2626"
+        assert str(w.root.cget("bg")) == widget.HEX["blocked"]
     finally:
         w.root.destroy()
