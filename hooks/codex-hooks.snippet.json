@@ -10,16 +10,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "vibesignal event --agent codex --state working --quiet"
-          }
-        ]
-      }
-    ],
     "PermissionRequest": [
       {
         "hooks": [

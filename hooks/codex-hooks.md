@@ -53,13 +53,14 @@ subprocess.run([
 
 ## Per-Turn States via the Hooks System
 
-Codex 0.130+ exposes a hooks system that fires on the same per-turn events Claude
-Code uses, configured in `~/.codex/config.toml` or an isolated `~/.codex/hooks.json`.
-Map `UserPromptSubmit` and `PostToolUse` to `working`, `PermissionRequest` to
-`blocked`, and `Stop` to `done` for the same live states as the Claude side. Trust the
-hooks once via `/hooks` in a Codex session. Use `--quiet` for Codex hooks: some hook
-types parse stdout as JSON, so normal human-readable status text causes an invalid
-hook output error.
+Codex 0.130+ exposes a hooks system that fires on per-turn events, configured in
+`~/.codex/config.toml` or an isolated `~/.codex/hooks.json`. Map
+`UserPromptSubmit` to `working`, `PermissionRequest` to `blocked`, and `Stop` to
+`done`. Do not map `PostToolUse` to `working`: in the Codex app it can refresh
+older sessions that are not actually running, which leaves the panel falsely
+green. Trust the hooks once via `/hooks` in a Codex session. Use `--quiet` for
+Codex hooks: some hook types parse stdout as JSON, so normal human-readable
+status text causes an invalid hook output error.
 
 The tracked snippet is [`codex-hooks.snippet.json`](codex-hooks.snippet.json). Merge it
 into `~/.codex/hooks.json`. If `vibesignal` is not on the hook shell's `PATH`, replace

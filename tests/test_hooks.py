@@ -67,7 +67,7 @@ def test_hook_snippets_use_quiet_vibesignal_commands():
 def test_codex_snippet_maps_turn_states():
     hooks = _codex_snippet()["hooks"]
     assert "working" in json.dumps(hooks["UserPromptSubmit"])
-    assert "working" in json.dumps(hooks["PostToolUse"])
+    assert "PostToolUse" not in hooks
     assert "blocked" in json.dumps(hooks["PermissionRequest"])
     assert "done" in json.dumps(hooks["Stop"])
 

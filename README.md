@@ -162,9 +162,10 @@ PY
 Codex hooks 覆盖这些事件：
 
 - `UserPromptSubmit`：标记为 working。
-- `PostToolUse`：保持 working。
 - `PermissionRequest`：标记为 blocked。
 - `Stop`：标记为 done。
+
+不要把 Codex 的 `PostToolUse` 映射成 `working`：在 Codex app 里它可能刷新并没有真正运行的旧会话，导致面板误报 working。
 
 ### 3. 信任 hooks
 
