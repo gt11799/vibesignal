@@ -30,7 +30,7 @@ def test_codex_usage_footer_shows_remaining_percent_and_reset(monkeypatch):
         }
     }
 
-    assert widget._format_codex_usage(data) == "5h 63% (4h42m) · 7d 65% (5d16h)"
+    assert widget._format_codex_usage(data) == "5h余 63% 重置4h42m · 7d余 65% 重置5d16h"
 
 
 def test_codex_usage_footer_accepts_remaining_percent(monkeypatch):
@@ -42,7 +42,7 @@ def test_codex_usage_footer_accepts_remaining_percent(monkeypatch):
         }
     }
 
-    assert widget._format_codex_usage(data) == "5h 91% (0h02m) · 7d 74% (2d00h)"
+    assert widget._format_codex_usage(data) == "5h余 91% 重置0h02m · 7d余 74% 重置2d00h"
 
 
 def test_fetch_usage_returns_empty_when_codex_usage_unavailable(monkeypatch, tmp_path):
@@ -76,7 +76,7 @@ def test_fetch_usage_falls_back_to_codex_session_logs(monkeypatch, tmp_path):
     monkeypatch.setattr(widget, "_codex_usage_json", boom)
     monkeypatch.setattr(widget.time, "time", lambda: 1_800_000_000)
 
-    assert widget._fetch_usage("codex") == "5h 54% (0h05m) · 7d 62% (2d00h)"
+    assert widget._fetch_usage("codex") == "5h余 54% 重置0h05m · 7d余 62% 重置2d00h"
 
 
 def test_claude_usage_footer_shows_remaining_percent_and_reset(monkeypatch):
@@ -100,7 +100,7 @@ def test_claude_usage_footer_shows_remaining_percent_and_reset(monkeypatch):
 
     monkeypatch.setattr(widget, "datetime", FixedDatetime)
 
-    assert widget._format_claude_usage(data) == "5h 57% (4h42m) · 7d 64% (5d16h)"
+    assert widget._format_claude_usage(data) == "5h余 57% 重置4h42m · 7d余 64% 重置5d16h"
 
 
 def test_fetch_usage_can_select_claude_provider(monkeypatch):
@@ -119,13 +119,13 @@ def test_fetch_usage_can_select_claude_provider(monkeypatch):
     monkeypatch.setattr(widget, "datetime", FixedDatetime)
     monkeypatch.setattr(widget, "_claude_oauth_usage_json", lambda: data)
 
-    assert widget._fetch_usage("claude") == "5h 91% (0h02m) · 7d 74% (2d00h)"
+    assert widget._fetch_usage("claude") == "5h余 91% 重置0h02m · 7d余 74% 重置2d00h"
 
 
 def test_fetch_usage_auto_prefers_codex_then_claude(monkeypatch):
     widget = _import_widget_without_tk(monkeypatch)
     monkeypatch.setattr(widget, "_fetch_codex_usage", lambda: "")
-    monkeypatch.setattr(widget, "_fetch_claude_usage", lambda: "5h 88%")
+    monkeypatch.setattr(widget, "_fetch_claude_usage", lambda: "5h余 88%")
 
-    assert widget._fetch_usage("auto") == "5h 88%"
+    assert widget._fetch_usage("auto") == "5h余 88%"
     assert widget._fetch_usage("off") == ""

@@ -77,8 +77,9 @@ Claude Code fires a `SessionEnd` hook, so a closed Claude session calls
 `hooks/claude-settings.snippet.json`). Codex, as of 0.135, has no `SessionEnd` event,
 so there is no matching `end` call for Codex. A closed Codex session is not cleared
 explicitly. If the last recorded Codex state is `done`, it falls off the panel
-through the 90s done fade; if it exits while `working`, after the 10-minute working
-TTL; if it exits while `blocked` or `error`, it stays visible until the 8h backstop,
+through the 90s done fade; if it exits while `working`, it uses the same short
+90s fade because Codex `Stop` can be missed after app restarts; if it exits while
+`blocked` or `error`, it stays visible until the 8h backstop,
 because Codex has no session-close event to clear it sooner. This asymmetry is
 deliberate: add a Codex `end` hook only if a later Codex version gains a
 session-close event.

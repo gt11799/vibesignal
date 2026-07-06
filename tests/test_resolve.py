@@ -3,6 +3,7 @@ import json
 from vibesignal import store
 from vibesignal.resolve import (
     BLOCKED_TTL_SECONDS,
+    CODEX_WORKING_TTL_SECONDS,
     COLORS,
     DONE_TTL_SECONDS,
     State,
@@ -151,6 +152,17 @@ def test_working_drops_after_its_ttl(tmp_path, monkeypatch):
     monkeypatch.setenv("VIBECODING_SIGNAL_DIR", str(tmp_path))
     store.record("claude", "s1", "working", project="p", now=1000.0)
     assert resolve_per_session(now=1000.0 + WORKING_TTL_SECONDS + 1) == []
+
+
+def test_codex_working_uses_short_ttl(tmp_path, monkeypatch):
+    # Codex has no SessionEnd hook and Stop is not guaranteed after app restarts,
+    # so a stale working row should fade quickly instead of lingering 10 minutes.
+    monkeypatch.setenv("VIBECODING_SIGNAL_DIR", str(tmp_path))
+    store.record("codex", "s1", "working", project="p", now=1000.0)
+
+    visible = resolve_per_session(now=1000.0 + CODEX_WORKING_TTL_SECONDS)
+    assert [r["state"] for r in visible] == ["working"]
+    assert resolve_per_session(now=1000.0 + CODEX_WORKING_TTL_SECONDS + 1) == []
 
 
 def test_error_persists_then_clears_at_backstop(tmp_path, monkeypatch):

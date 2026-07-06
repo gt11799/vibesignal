@@ -51,6 +51,7 @@ COLORS: dict[str, list | None] = {
 # hard-crashed session that left no final event.
 WORKING_TTL_SECONDS = store.DEFAULT_TTL_SECONDS  # 600 (10 min): silent working is stale
 DONE_TTL_SECONDS = 90.0                          # transient "your move" pulse
+CODEX_WORKING_TTL_SECONDS = DONE_TTL_SECONDS     # Codex may miss Stop after app restarts
 BLOCKED_TTL_SECONDS = 8 * 60 * 60.0              # 28800 (8 h): needs-you spans a workday
 
 _STATE_TTL_SECONDS: dict[str, float] = {
@@ -66,9 +67,15 @@ _STATE_TTL_SECONDS: dict[str, float] = {
 _LOAD_HORIZON_SECONDS = max(_STATE_TTL_SECONDS.values())
 
 
-def _expired(state: str, ts: object, now: float) -> bool:
+def _state_ttl_seconds(state: str, agent: object = None) -> float:
+    if state == State.WORKING and agent == "codex":
+        return CODEX_WORKING_TTL_SECONDS
+    return _STATE_TTL_SECONDS.get(state, WORKING_TTL_SECONDS)
+
+
+def _expired(state: str, ts: object, now: float, agent: object = None) -> bool:
     """True if a state has outlived its lifetime and should drop off the panel."""
-    ttl = _STATE_TTL_SECONDS.get(state, WORKING_TTL_SECONDS)
+    ttl = _state_ttl_seconds(state, agent)
     age = now - ts if isinstance(ts, (int, float)) else 0.0
     return age > ttl
 
@@ -93,7 +100,7 @@ def resolve_color(ttl: float = _LOAD_HORIZON_SECONDS,
     states = []
     for d in store.load_active(ttl=ttl, now=now):
         st = normalize(d.get("state", State.IDLE))
-        if _expired(st, d.get("ts", 0), now):
+        if _expired(st, d.get("ts", 0), now, d.get("agent")):
             continue
         states.append(st)
     state = aggregate(states)
@@ -110,7 +117,7 @@ def resolve_per_session(ttl: float = _LOAD_HORIZON_SECONDS,
         if st not in COLORS:
             st = State.IDLE
         ts = d.get("ts", 0)
-        if _expired(st, ts, now):
+        if _expired(st, ts, now, d.get("agent")):
             continue
         rows.append({
             "agent": d.get("agent", "?"),

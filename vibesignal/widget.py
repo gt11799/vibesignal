@@ -158,8 +158,8 @@ def _fmt_reset_seconds(secs):
         return ""
     m = int(secs // 60)
     if m >= 2880:
-        return f" ({m // 1440}d{(m % 1440) // 60:02d}h)"
-    return f" ({m // 60}h{m % 60:02d}m)"
+        return f"{m // 1440}d{(m % 1440) // 60:02d}h"
+    return f"{m // 60}h{m % 60:02d}m"
 
 
 def _remaining_percent(window: dict, *, utilization_is_used: bool = False) -> float | None:
@@ -181,7 +181,8 @@ def _format_remaining_window(label: str, window: dict, *, utilization_is_used: b
     if remaining is None:
         return None
     reset = _fmt_reset_seconds(_reset_seconds(window))
-    return f"{label} {remaining:.0f}%{reset}"
+    reset_text = f" 重置{reset}" if reset else ""
+    return f"{label}余 {remaining:.0f}%{reset_text}"
 
 
 def _format_codex_usage(data: dict | None) -> str:
