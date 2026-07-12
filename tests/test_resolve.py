@@ -3,6 +3,7 @@ import json
 from vibesignal import store
 from vibesignal.resolve import (
     BLOCKED_TTL_SECONDS,
+    CODEX_BLOCKED_TTL_SECONDS,
     CODEX_WORKING_TTL_SECONDS,
     COLORS,
     DONE_TTL_SECONDS,
@@ -163,6 +164,18 @@ def test_codex_working_uses_short_ttl(tmp_path, monkeypatch):
     visible = resolve_per_session(now=1000.0 + CODEX_WORKING_TTL_SECONDS)
     assert [r["state"] for r in visible] == ["working"]
     assert resolve_per_session(now=1000.0 + CODEX_WORKING_TTL_SECONDS + 1) == []
+
+
+def test_codex_blocked_uses_shorter_ttl(tmp_path, monkeypatch):
+    # Codex PermissionRequest can miss a later Stop/done after app restarts or
+    # thread changes, so stale blocked rows should not pin the panel for hours.
+    monkeypatch.setenv("VIBECODING_SIGNAL_DIR", str(tmp_path))
+    store.record("codex", "s1", "blocked", project="p", now=1000.0)
+
+    visible = resolve_per_session(now=1000.0 + CODEX_BLOCKED_TTL_SECONDS)
+    assert [r["state"] for r in visible] == ["blocked"]
+    assert resolve_per_session(now=1000.0 + CODEX_BLOCKED_TTL_SECONDS + 1) == []
+    assert resolve_color(now=1000.0 + CODEX_BLOCKED_TTL_SECONDS + 1) == ("idle", None)
 
 
 def test_error_persists_then_clears_at_backstop(tmp_path, monkeypatch):

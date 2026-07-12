@@ -43,15 +43,16 @@ COLORS: dict[str, list | None] = {
 # Each state has its own lifetime, because the hooks only refresh a session's
 # timestamp when something happens. `working` refreshes on every tool call, so a
 # working session silent past its TTL is treated as dead. `done` is a transient
-# "your move" pulse that fades quickly. `blocked` and `error` are the opposite:
-# nothing refreshes them while they wait on you, so a short TTL would make a
-# long-pending prompt vanish exactly when it is most overdue. They persist for a
-# long backstop instead, cleared sooner when you act (state changes), when
-# SessionEnd fires, or by a manual clear; the backstop only self-cleans a
-# hard-crashed session that left no final event.
+# "your move" pulse that fades quickly. `blocked` and `error` usually persist
+# longer because nothing refreshes them while they wait on you; a short TTL would
+# make a long-pending prompt vanish exactly when it is most overdue. Codex is the
+# exception: PermissionRequest can miss a later Stop/done after app restarts or
+# thread changes, so its blocked rows use the working TTL instead of the 8h
+# backstop.
 WORKING_TTL_SECONDS = store.DEFAULT_TTL_SECONDS  # 600 (10 min): silent working is stale
 DONE_TTL_SECONDS = 90.0                          # transient "your move" pulse
 CODEX_WORKING_TTL_SECONDS = DONE_TTL_SECONDS     # Codex may miss Stop after app restarts
+CODEX_BLOCKED_TTL_SECONDS = WORKING_TTL_SECONDS  # Codex may miss done after permission prompts
 BLOCKED_TTL_SECONDS = 8 * 60 * 60.0              # 28800 (8 h): needs-you spans a workday
 
 _STATE_TTL_SECONDS: dict[str, float] = {
@@ -70,6 +71,8 @@ _LOAD_HORIZON_SECONDS = max(_STATE_TTL_SECONDS.values())
 def _state_ttl_seconds(state: str, agent: object = None) -> float:
     if state == State.WORKING and agent == "codex":
         return CODEX_WORKING_TTL_SECONDS
+    if state == State.BLOCKED and agent == "codex":
+        return CODEX_BLOCKED_TTL_SECONDS
     return _STATE_TTL_SECONDS.get(state, WORKING_TTL_SECONDS)
 
 

@@ -210,7 +210,7 @@ aggregate: working
 - `vibesignal status` 看不到 `codex/...`：优先确认 `/hooks` 里已经信任 VibeSignal hooks。
 - pipe-test 可用但真实 Codex 不触发：重启 Codex 或新开会话，再执行 `/hooks` 检查信任状态。
 - hook 报找不到命令：把 `~/.codex/hooks.json` 里的命令改成 `$HOME/.local/bin/vibesignal` 的绝对路径。
-- 状态显示 `done` 或旧的 `working` 后没有立即消失：Codex 没有 SessionEnd 事件，会话行靠 TTL 过期。`done` 和 Codex `working` 都会在约 90 秒后淡出。
+- 状态显示 `done`、旧的 `working` 或旧的 `blocked` 后没有立即消失：Codex 没有 SessionEnd 事件，会话行靠 TTL 过期。`done` 和 Codex `working` 会在约 90 秒后淡出；Codex `blocked` 会在约 10 分钟后淡出。
 
 ## 剩余额度状态栏
 

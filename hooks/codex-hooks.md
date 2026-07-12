@@ -79,10 +79,10 @@ so there is no matching `end` call for Codex. A closed Codex session is not clea
 explicitly. If the last recorded Codex state is `done`, it falls off the panel
 through the 90s done fade; if it exits while `working`, it uses the same short
 90s fade because Codex `Stop` can be missed after app restarts; if it exits while
-`blocked` or `error`, it stays visible until the 8h backstop,
-because Codex has no session-close event to clear it sooner. This asymmetry is
-deliberate: add a Codex `end` hook only if a later Codex version gains a
-session-close event.
+`blocked`, it uses the 10-minute working TTL because PermissionRequest can miss
+the later `Stop`/`done`; if it exits while `error`, it stays visible until the 8h
+backstop. This asymmetry is deliberate: add a Codex `end` hook only if a later
+Codex version gains a session-close event.
 
 This keeps the Claude Code and Codex paths on one light and one state store, which
 satisfies the cross-agent requirement: the function works under role reversal or
