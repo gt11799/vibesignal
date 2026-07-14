@@ -45,6 +45,22 @@ def test_codex_usage_footer_accepts_remaining_percent(monkeypatch):
     assert widget._format_codex_usage(data) == "5h余 91% 重置0h02m · 7d余 74% 重置2d00h"
 
 
+def test_codex_usage_footer_labels_single_weekly_window(monkeypatch):
+    widget = _import_widget_without_tk(monkeypatch)
+    data = {
+        "rate_limit": {
+            "primary": {
+                "used_percent": 46,
+                "window_minutes": 10_080,
+                "reset_after_seconds": 457_200,
+            },
+            "secondary": None,
+        }
+    }
+
+    assert widget._format_codex_usage(data) == "7d余 54% 重置5d07h"
+
+
 def test_fetch_usage_returns_empty_when_codex_usage_unavailable(monkeypatch, tmp_path):
     widget = _import_widget_without_tk(monkeypatch)
 

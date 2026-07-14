@@ -12,7 +12,7 @@ VibeSignal 是一个给 AI 编码工具用的桌面状态面板和 USB 状态灯
 - 页面美化：高对比深色主题、右上角停靠、清晰白字、blocked/error 高亮报警态。
 - Claude Code 支持：通过 hooks 自动上报 working、blocked、done 和 SessionEnd。
 - Codex 进程支持：通过 Codex hooks 把本地 Codex 会话纳入同一个状态面板。
-- 剩余额度展示：面板底部可显示 Codex 或 Claude Code 的 5 小时窗口和 7 天窗口剩余比例与重置倒计时。
+- 剩余额度展示：面板底部可显示 Codex 的 7 天窗口，或 Claude Code 的 5 小时窗口和 7 天窗口剩余比例与重置倒计时。
 - Cowork 桥接：可把 Claude.app Cowork 本地 VM 的活动近似显示为 `cowork/local-vm`。
 - 多会话聚合：多个 agent 同时跑时按 `blocked > error > done > working > idle` 聚合。
 - 多种展示方式：USB busylight、终端 watch 面板、Tk 桌面 widget。
@@ -217,12 +217,12 @@ aggregate: working
 桌面面板底部会尝试显示：
 
 ```text
-5h余 57% 重置4h40m · 7d余 64% 重置5d16h
+7d余 64% 重置5d16h
 ```
 
 可选 provider：
 
-- `codex`：读取 `~/.codex/auth.json` 里的 Codex ChatGPT 登录态 access token，优先请求 Codex usage 接口；接口不可用时，读取本机 `~/.codex/sessions/**/*.jsonl` 里最新的 `rate_limits`。
+- `codex`：读取 `~/.codex/auth.json` 里的 Codex ChatGPT 登录态 access token，优先请求 Codex usage 接口；接口不可用时，读取本机 `~/.codex/sessions/**/*.jsonl` 里最新的 `rate_limits`。新版 Codex 只有 7 天窗口时，状态栏只显示 `7d余 ...`。
 - `claude`：读取 macOS Keychain 里的 Claude Code OAuth token，请求 Anthropic OAuth usage 接口。
 - `auto`：先尝试 Codex，再尝试 Claude Code。
 - `off`：不显示底部剩余额度状态栏。

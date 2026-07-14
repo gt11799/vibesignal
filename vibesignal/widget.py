@@ -185,6 +185,19 @@ def _format_remaining_window(label: str, window: dict, *, utilization_is_used: b
     return f"{label}余 {remaining:.0f}%{reset_text}"
 
 
+def _codex_window_label(window: dict, fallback: str) -> str:
+    minutes = _num(_first_present(window, "window_minutes", "windowMinutes"))
+    if minutes is None:
+        seconds = _num(_first_present(window, "limit_window_seconds", "limitWindowSeconds"))
+        minutes = seconds / 60 if seconds is not None else None
+    if minutes is not None:
+        if 295 <= minutes <= 305:
+            return "5h"
+        if 10_000 <= minutes <= 10_160:
+            return "7d"
+    return fallback
+
+
 def _format_codex_usage(data: dict | None) -> str:
     if not isinstance(data, dict):
         return ""
@@ -192,12 +205,19 @@ def _format_codex_usage(data: dict | None) -> str:
     if not isinstance(rate, dict):
         return ""
     parts = []
+    seen_labels = set()
     for key, camel, direct, label in (("primary_window", "primaryWindow", "primary", "5h"),
                                       ("secondary_window", "secondaryWindow", "secondary", "7d")):
         window = _first_present(rate, key, camel, direct)
+        if not isinstance(window, dict):
+            continue
+        label = _codex_window_label(window, label)
+        if label in seen_labels:
+            continue
         part = _format_remaining_window(label, window)
         if part:
             parts.append(part)
+            seen_labels.add(label)
     return " · ".join(parts)
 
 
